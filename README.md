@@ -7,7 +7,12 @@ It is advisable to use conda
 Create environment with python
 
 The required packages can be installed using conda or pip
+
+On Linux:
 ``pip install -r requirements.txt``
+
+On Windows:
+``pip install -r req_win.txt``
 
 ## Examples
 See the examples in folder **examples**
