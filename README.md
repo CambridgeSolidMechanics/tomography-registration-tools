@@ -4,15 +4,8 @@ Python tools for manipulation of volume data
 ## Setting up environment
 It is advisable to use conda
 
-Create environment with python
-
-The required packages can be installed using conda or pip
-
-On Linux:
-``pip install -r requirements.txt``
-
-On Windows:
-``pip install -r req_win.txt``
+Create environment 
+``conda env create -f environment.yml``
 
 ## Examples
 See the examples in folder **examples**
