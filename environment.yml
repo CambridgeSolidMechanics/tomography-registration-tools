@@ -1,0 +1,6 @@
+name: tomo-reg-env
+channels:
+  - defaults
+dependencies:
+  - python
+  - pip
