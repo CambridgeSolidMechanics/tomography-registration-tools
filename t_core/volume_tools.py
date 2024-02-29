@@ -22,23 +22,24 @@ def displace_rigid_xyz(vol: np.ndarray, disp: Iterable[int]) -> np.ndarray:
     new_vol[disp[0]:, disp[1]:, disp[2]:] = vol[:-disp[0],:-disp[1],:-disp[2]]
     return new_vol
 
-def deform_general(vol: np.ndarray, x_func: Callable, y_func: Callable, z_func: Callable) -> np.ndarray:
+def deform_general(vol_a: np.ndarray, x_func: Callable, y_func: Callable, z_func: Callable) -> np.ndarray:
     """Deform volume based on 3D coordinate transformation functions.
 
     Note that torch grid_sample takes in grid coordinates from which to sample.
     Therefore, we need to provide the inverse transformation functions -
-    i.e. 
+    i.e. we provide volume A and functions that map coordinates
+    from new volume B to old volume A.
     Args:
-        vol (np.ndarray): 3d volume
-        x_func (Callable): x-function with signature (x,y,z) -> X
-        y_func (Callable): y-function with signature (x,y,z) -> Y
-        z_func (Callable): z-function with signature (x,y,z) -> Z
+        vol_a (np.ndarray): 3d volume
+        x_func (Callable): x-function with signature (x_b,y_b,z_b) -> X_a
+        y_func (Callable): y-function with signature (x_b,y_b,z_b) -> Y_a
+        z_func (Callable): z-function with signature (x_b,y_b,z_b) -> Z_a
 
     Returns:
-        np.ndarray: deformed volume
+        vol_b (np.ndarray): deformed volume
     """
-    res = vol.shape
-    vol_torch = torch.from_numpy(vol).view(1,1,*res)
+    res = vol_a.shape
+    vol_torch = torch.from_numpy(vol_a).view(1,1,*res)
     x = torch.linspace(-1, 1, res[0])
     y = torch.linspace(-1, 1, res[1]) 
     z = torch.linspace(-1, 1, res[2]) 
@@ -48,8 +49,8 @@ def deform_general(vol: np.ndarray, x_func: Callable, y_func: Callable, z_func: 
     Z1 = z_func(X,Y,Z)
     grid = torch.stack((Z1,Y1,X1), dim=-1).unsqueeze(0) # pytorch uses order z,y,x
     deformed_volume = torch.nn.functional.grid_sample(vol_torch, grid, align_corners=True)
-    def_vol = deformed_volume.squeeze().numpy()
-    return def_vol
+    vol_b = deformed_volume.squeeze().numpy()
+    return vol_b
 
 def plot_undef_def_slices(vol: np.ndarray, def_vol: np.ndarray):
     """Plot slices of undeformed and deformed volumes.
