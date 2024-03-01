@@ -5,6 +5,7 @@ import numpy as np
 import scipy.io as sio
 import torch
 import matplotlib.pyplot as plt
+import cv2 as cv
 from statsmodels.tsa.stattools import acf
 # %%
 def displace_rigid_xyz(vol: np.ndarray, disp: Iterable[int]) -> np.ndarray:
@@ -255,4 +256,100 @@ def plot_acf(vol: np.ndarray, **fig_kwargs):
     ax[1,2].axhline(0, color='k', lw=0.5)
     fig.tight_layout()
     plt.show()
-# %%
+
+def select_pos_in_volume(vol: np.ndarray) -> Tuple[int,int,int]:
+    """Take slices through the volume and select a position.
+
+    Args:
+        vol (np.ndarray): 3d volume
+
+    Returns:
+        Tuple[int,int,int]: voxel coordinates of selected position
+    """
+    cv.namedWindow('3D Volume', cv.WINDOW_NORMAL)
+
+    def on_slider_change(z):
+        cv.imshow('3D Volume', vol[:,:,z])
+
+    c_x, c_y, c_z = 0, 0, 0
+    def on_mouse_click(event, x, y, flags, param):
+        nonlocal c_x, c_y, c_z
+        if event == cv.EVENT_LBUTTONDOWN:
+            c_x, c_y, c_z = x, y, cv.getTrackbarPos('z', '3D Volume')
+            print(f'x: {c_x}, y: {c_y}, z: {c_z}')
+
+    cv.createTrackbar('z', '3D Volume', 0, vol.shape[2]-1, on_slider_change)
+    on_slider_change(0)
+    cv.setMouseCallback('3D Volume', on_mouse_click)
+
+    cv.waitKey()
+    cv.destroyAllWindows()
+    return c_x, c_y, c_z
+
+class GaussianDeformationField:
+    """Localised Gaussian deformation field.
+    """
+    def __init__(self, sigma_xyz: Iterable[float], A_xyz: Iterable[float], r0_xyz: Iterable[float] = (0,0,0)):
+        """Create a Gaussian deformation field.
+
+        Depending on the values of sigma_xyz and A_xyz, the field can be
+        localised to an ellipsoidal region {sigma_x, sigma_y, sigma_z}>0,
+        cylindrical region (e.g. {sigma_x, sigma_y}>0, sigma_z=0), or 
+        planar region (e.g. {sigma_x, sigma_y}=0, sigma_z>0).
+        Args:
+            sigma_xyz (Iterable[float]): Length-scales of field in x, y, z
+                Any zero value will result in effectively infinite length-scale
+            A_xyz (Iterable[float]): Magnitude of field in x, y, z.
+            r0_xyz (Iterable[float], optional): Spatial centering of the Gaussian.
+                Volume bounds are (-1,1) in all dimensions. Defaults to (0,0,0).
+        """
+        self.sigma_xyz = sigma_xyz
+        self.A_xyz = A_xyz
+        self.r0_xyz = r0_xyz
+        for s,a in zip(sigma_xyz, A_xyz):
+            assert s >= 0
+            if s>0:
+                assert a < s*np.exp(-0.5)
+        # note for this type of field, the requirement for compatibility is
+        # A_vox < sigma_vox*exp(-0.5) ~ 1.65*sigma_vox
+                
+    def gaussian_magnitude(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+        magnitude = 1.0
+        for s, x_i, r_i in zip(self.sigma_xyz, [x,y,z], self.r0_xyz):
+            if s > 0:
+                if isinstance(magnitude, float):
+                    magnitude = torch.exp(-0.5*((x_i - r_i)**2/s**2))
+                else:
+                    magnitude *= torch.exp(-0.5*((x_i - r_i)**2/s**2))
+        return magnitude
+    
+    def x_func(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+        if self.A_xyz[0] == 0:
+            return x
+        return x + self.A_xyz[0]*self.gaussian_magnitude(x,y,z)
+        
+    def y_func(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+        if self.A_xyz[1] == 0:
+            return y
+        return y + self.A_xyz[1]*self.gaussian_magnitude(x,y,z)
+    
+    def z_func(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+        if self.A_xyz[2] == 0:
+            return z
+        return z + self.A_xyz[2]*self.gaussian_magnitude(x,y,z)
+    
+    def __call__(self, vol: np.ndarray) -> np.ndarray:
+        """Apply the deformation field to volume.
+
+        Args:
+            vol (np.ndarray): 3d volume
+
+        Returns:
+            np.ndarray: deformed volume
+        """
+        return deform_general(
+            vol, 
+            self.x_func,
+            self.y_func,
+            self.z_func
+        )
