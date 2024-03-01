@@ -257,7 +257,7 @@ def plot_acf(vol: np.ndarray, **fig_kwargs):
     fig.tight_layout()
     plt.show()
 
-def select_pos_in_volume(vol: np.ndarray) -> Tuple[int,int,int]:
+def select_pos_in_volume(_vol: np.ndarray) -> Tuple[int,int,int]:
     """Take slices through the volume and select a position.
 
     Args:
@@ -267,7 +267,9 @@ def select_pos_in_volume(vol: np.ndarray) -> Tuple[int,int,int]:
         Tuple[int,int,int]: voxel coordinates of selected position
     """
     cv.namedWindow('3D Volume', cv.WINDOW_NORMAL)
-
+    cmin, cmax = _vol.min(), _vol.max()
+    vol = (_vol - cmin) / (cmax - cmin)
+    
     def on_slider_change(z):
         cv.imshow('3D Volume', vol[:,:,z])
 
