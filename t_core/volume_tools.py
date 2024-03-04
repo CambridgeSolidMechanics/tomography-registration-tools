@@ -7,6 +7,7 @@ import torch
 import matplotlib.pyplot as plt
 import cv2 as cv
 from statsmodels.tsa.stattools import acf
+import yaml
 # %%
 def displace_rigid_xyz(vol: np.ndarray, disp: Iterable[int]) -> np.ndarray:
     """Deform by rigid body displacement
@@ -269,7 +270,7 @@ def select_pos_in_volume(_vol: np.ndarray) -> Tuple[int,int,int]:
     cv.namedWindow('3D Volume', cv.WINDOW_NORMAL)
     cmin, cmax = _vol.min(), _vol.max()
     vol = (_vol - cmin) / (cmax - cmin)
-    
+
     def on_slider_change(z):
         cv.imshow('3D Volume', vol[:,:,z])
 
@@ -314,6 +315,47 @@ class GaussianDeformationField:
                 assert a < s*np.exp(-0.5)
         # note for this type of field, the requirement for compatibility is
         # A_vox < sigma_vox*exp(-0.5) ~ 1.65*sigma_vox
+
+    def __repr__(self) -> str:
+        return f"GaussianDeformationField(sigma_xyz={self.sigma_xyz}, A_xyz={self.A_xyz}, r0_xyz={self.r0_xyz})"
+
+    @staticmethod
+    def from_yaml(fn: Union[str, Path]):
+        """Load Gaussian deformation field from yaml file.
+
+        Args:
+            fn (Union[str, Path]): file name
+
+        Returns:
+            GaussianDeformationField: instance of GaussianDeformationField
+        """
+        if isinstance(fn, str):
+            fn = Path(fn)
+        with open(fn, 'r') as f:
+            data = yaml.safe_load(f)
+        if 'class' in data:
+            assert data['class'] == 'GaussianDeformationField'
+            data.pop('class')
+        assert 'sigma_xyz' in data
+        assert 'A_xyz' in data
+        return GaussianDeformationField(**data)
+    
+    def to_yaml(self, fn: Union[str, Path]):
+        """Save Gaussian deformation field to yaml file.
+
+        Args:
+            fn (Union[str, Path]): file name
+        """
+        if isinstance(fn, str):
+            fn = Path(fn)
+        data = {
+            'class': 'GaussianDeformationField',
+            'sigma_xyz': self.sigma_xyz,
+            'A_xyz': self.A_xyz,
+            'r0_xyz': self.r0_xyz
+        }
+        with open(fn, 'w') as f:
+            yaml.dump(data, f)
                 
     def gaussian_magnitude(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         magnitude = 1.0
