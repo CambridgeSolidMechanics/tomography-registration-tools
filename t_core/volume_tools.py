@@ -1,5 +1,5 @@
 # %%
-from typing import Callable, Union, Iterable, Tuple
+from typing import Callable, Union, Iterable, Tuple, Optional
 from pathlib import Path
 import numpy as np
 import scipy.io as sio
@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import cv2 as cv
 from statsmodels.tsa.stattools import acf
 import yaml
-# %%
+
 def displace_rigid_xyz(vol: np.ndarray, disp: Iterable[int]) -> np.ndarray:
     """Deform by rigid body displacement
 
@@ -367,6 +367,16 @@ class GaussianDeformationField:
                     magnitude *= torch.exp(-0.5*((x_i - r_i)**2/s**2))
         return magnitude
     
+    def displacement(
+            self,
+            x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
+            i: int, 
+            gaussian_magnitude: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        if gaussian_magnitude is None:
+            gaussian_magnitude = self.gaussian_magnitude(x,y,z)
+        return self.A_xyz[i]*gaussian_magnitude
+
     def x_func(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         if self.A_xyz[0] == 0:
             return x
@@ -391,11 +401,17 @@ class GaussianDeformationField:
         Returns:
             np.ndarray: deformed volume
         """
-        # TODO: we can make it faster by directly calling grid_sample, 
-        # and only calculating gaussian_magnitude once
-        return deform_general(
-            vol, 
-            self.x_func,
-            self.y_func,
-            self.z_func
-        )
+        res = vol.shape
+        vol_torch = torch.from_numpy(vol).view(1,1,*res)
+        x = torch.linspace(-1, 1, res[0])
+        y = torch.linspace(-1, 1, res[1]) 
+        z = torch.linspace(-1, 1, res[2]) 
+        X,Y,Z = torch.meshgrid(x,y,z, indexing='ij')
+        gm = self.gaussian_magnitude(X,Y,Z)
+        X1 = X if self.A_xyz[0] == 0 else X + self.displacement(X,Y,Z,0, gm)
+        Y1 = Y if self.A_xyz[1] == 0 else Y + self.displacement(X,Y,Z,1, gm)
+        Z1 = Z if self.A_xyz[2] == 0 else Z + self.displacement(X,Y,Z,2, gm)
+        grid = torch.stack((Z1,Y1,X1), dim=-1).unsqueeze(0) # pytorch uses order z,y,x
+        deformed_volume = torch.nn.functional.grid_sample(vol_torch, grid, align_corners=True)
+        vol_b = deformed_volume.squeeze().numpy()
+        return vol_b
