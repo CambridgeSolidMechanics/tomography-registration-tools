@@ -391,6 +391,8 @@ class GaussianDeformationField:
         Returns:
             np.ndarray: deformed volume
         """
+        # TODO: we can make it faster by directly calling grid_sample, 
+        # and only calculating gaussian_magnitude once
         return deform_general(
             vol, 
             self.x_func,
