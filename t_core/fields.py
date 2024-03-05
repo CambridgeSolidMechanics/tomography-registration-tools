@@ -81,7 +81,8 @@ class GaussianDisplacementField(DisplacementField):
             self,
             sigma_xyz: Iterable[float],
             A_xyz: Iterable[float],
-            r0_xyz: Iterable[float] = (0,0,0)
+            r0_xyz: Iterable[float] = (0,0,0),
+            **kwargs
     ) -> None:
         """Create a Gaussian deformation field.
 
@@ -97,6 +98,8 @@ class GaussianDisplacementField(DisplacementField):
                 Volume bounds are (-1,1) in all dimensions. Defaults to (0,0,0).
         """
         super().__init__()
+        if 'class' in kwargs:
+            assert kwargs['class'] == 'GaussianDisplacementField'
 
         self.sigma_xyz = sigma_xyz
         self.A_xyz = A_xyz
@@ -137,19 +140,18 @@ class GaussianDisplacementField(DisplacementField):
     
     @staticmethod
     def from_dict(data: Dict) -> 'GaussianDisplacementField':
-        assert 'class' in data
-        assert data['class'] == 'GaussianDisplacementField'
-        data.pop('class')
         return GaussianDisplacementField(**data)
     
 class UniformDisplacementField(DisplacementField):
-    def __init__(self, u_xyz: Iterable[float]) -> None:
+    def __init__(self, u_xyz: Iterable[float], **kwargs) -> None:
         """Uniform rigid body displacement field.
 
         Args:
             u_xyz (Iterable[float]): x,y,z displacements in normalized coordinates.
         """
         super().__init__()
+        if 'class' in kwargs:
+            assert kwargs['class'] == 'UniformDisplacementField'
         self.u_xyz = u_xyz
     
     def displacement(
@@ -167,19 +169,18 @@ class UniformDisplacementField(DisplacementField):
     
     @staticmethod
     def from_dict(data: Dict) -> 'UniformDisplacementField':
-        assert 'class' in data
-        assert data['class'] == 'UniformDisplacementField'
-        data.pop('class')
         return UniformDisplacementField(**data)
     
 class UniformStrainDisplacementField(DisplacementField):
-    def __init__(self, eps_xyz: Iterable[float]) -> None:
+    def __init__(self, eps_xyz: Iterable[float], **kwargs) -> None:
         """Create a uniform strain displacement field.
 
         Args:
             eps_xyz (Iterable[float]): strains eps_xx, eps_yy, eps_zz
         """
         super().__init__()
+        if 'class' in kwargs:
+            assert kwargs['class'] == 'UniformStrainDisplacementField'
         self.eps_xyz = eps_xyz
     
     def displacement(
@@ -202,9 +203,6 @@ class UniformStrainDisplacementField(DisplacementField):
     
     @staticmethod
     def from_dict(data: Dict) -> 'UniformStrainDisplacementField':
-        assert 'class' in data
-        assert data['class'] == 'UniformStrainDisplacementField'
-        data.pop('class')
         return UniformStrainDisplacementField(**data)
 
     
