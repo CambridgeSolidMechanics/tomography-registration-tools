@@ -42,6 +42,16 @@ class Field:
         deformed_volume = torch.nn.functional.grid_sample(vol_torch, grid, align_corners=True)
         vol_b = deformed_volume.squeeze().numpy()
         return vol_b
+    
+    def to_yaml(self, path: Union[str, Path]) -> None:
+        """Save the field to yaml file.
+
+        Requires child classes to implement the to_dict method.
+        Args:
+            path (Union[str, Path]): path to save the field
+        """
+        with open(path, 'w') as f:
+            yaml.dump(self.to_dict(), f)
 
 class DisplacementField(Field):
     """Class for fields where the deformation can be conveniently expressed as a displacement.
