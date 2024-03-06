@@ -258,28 +258,51 @@ def plot_acf(vol: np.ndarray, **fig_kwargs):
     fig.tight_layout()
     plt.show()
 
-def select_pos_in_volume(_vol: np.ndarray) -> Tuple[int,int,int]:
-    """Take slices through the volume and select a position.
+def select_points_in_volume(
+        _vol: np.ndarray, draw=False, radius=0.1
+) -> Tuple[int,int,int]:
+    """Show slices through the volume and return positions of clicked points.
 
     Args:
         vol (np.ndarray): 3d volume
 
     Returns:
-        Tuple[int,int,int]: voxel coordinates of selected position
+        List[Tuple[int,int,int]]: voxel coordinates of selected position
     """
     cv.namedWindow('3D Volume', cv.WINDOW_NORMAL)
     cmin, cmax = _vol.min(), _vol.max()
     vol = (_vol - cmin) / (cmax - cmin)
+    points = []
+    r_pix = int(min(vol.shape)*radius)
 
     def on_slider_change(z):
-        cv.imshow('3D Volume', vol[:,:,z])
+        if draw:
+            nonlocal points
+            im = vol[:,:,z].copy()
+            for p in points:
+                # find out if the sphere intersects the slice
+                a = np.abs(z - p[2])
+                if a<r_pix:
+                    r_int = int(np.sqrt(r_pix**2 - a**2))
+                    im = cv.circle(im, p[:2], r_int, (0,0,1), 1)
+                    
+                    if p[2] == z:
+                        im = cv.drawMarker(
+                            im, p[:2], (1,0,0), 
+                            markerType=cv.MARKER_CROSS, markerSize=5, thickness=1
+                        )
 
-    c_x, c_y, c_z = 0, 0, 0
+            cv.imshow('3D Volume', im)
+        else:
+            cv.imshow('3D Volume', vol[:,:,z])
+
+
     def on_mouse_click(event, x, y, flags, param):
-        nonlocal c_x, c_y, c_z
+        nonlocal points
         if event == cv.EVENT_LBUTTONDOWN:
             c_x, c_y, c_z = x, y, cv.getTrackbarPos('z', '3D Volume')
             print(f'x: {c_x}, y: {c_y}, z: {c_z}')
+            points.append((c_x, c_y, c_z))
 
     cv.createTrackbar('z', '3D Volume', 0, vol.shape[2]-1, on_slider_change)
     on_slider_change(0)
@@ -287,4 +310,4 @@ def select_pos_in_volume(_vol: np.ndarray) -> Tuple[int,int,int]:
 
     cv.waitKey()
     cv.destroyAllWindows()
-    return c_x, c_y, c_z
+    return points
