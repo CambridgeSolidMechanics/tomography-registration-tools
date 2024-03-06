@@ -265,6 +265,11 @@ def select_points_in_volume(
 
     Args:
         vol (np.ndarray): 3d volume
+        draw (bool, optional): Think of the selected points as spheres.
+            If True, draw circles representing slices through the sphere. 
+            Defaults to False.
+        radius (float, optional): radius of the sphere in fraction of 
+            the smallest dimension of the volume.
 
     Returns:
         List[Tuple[int,int,int]]: voxel coordinates of selected position
@@ -285,7 +290,7 @@ def select_points_in_volume(
                 if a<r_pix:
                     r_int = int(np.sqrt(r_pix**2 - a**2))
                     im = cv.circle(im, p[:2], r_int, (0,0,1), 1)
-                    
+
                     if p[2] == z:
                         im = cv.drawMarker(
                             im, p[:2], (1,0,0), 
