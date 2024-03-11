@@ -20,19 +20,21 @@ class BSplineField:
         elif i == 3:
             return u**3 / 6
 
-    def __init__(self, phi_x: np.ndarray, origin=(0,0,0), spacing=(1,1,1)) -> None:
+    def __init__(self, phi_x: np.ndarray, origin=(-1,-1,-1), spacing=(1,1,1)) -> None:
         super().__init__()
         assert phi_x.ndim == 4
         self.phi_x = phi_x
+        _,nz,ny,nx = phi_x.shape
+        self.grid_size = (nx, ny, nz)
         self.origin = origin
         self.spacing = spacing
 
 
     def displacement(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor, i: int, **kwargs):
         dx, dy, dz = self.spacing
-        u = x/dx
-        v = y/dy
-        w = z/dz
+        u = (x - self.origin[0] - dx)/dx
+        v = (y - self.origin[1] - dy)/dy
+        w = (z - self.origin[2] - dz)/dz
         ix = np.floor(u).astype(int)
         iy = np.floor(v).astype(int)
         iz = np.floor(w).astype(int)
@@ -41,12 +43,12 @@ class BSplineField:
         w = w - iz
         T = np.zeros_like(x)
         for l in range(4):
-            ix_loc = np.clip(ix + l, 0, self.phi_x.shape[0]-1)
+            ix_loc = np.clip(ix + l, 0, self.grid_size[0]-1)
             for m in range(4):
-                iy_loc = np.clip(iy + m, 0, self.phi_x.shape[1]-1)
+                iy_loc = np.clip(iy + m, 0, self.grid_size[1]-1)
                 for n in range(4):
-                    iz_loc = np.clip(iz + n, 0, self.phi_x.shape[2]-1)
-                    T += self.bspline(u, l) * self.bspline(v, m) * self.bspline(w, n) * self.phi_x[i, ix_loc, iy_loc, iz_loc]
+                    iz_loc = np.clip(iz + n, 0, self.grid_size[2]-1)
+                    T += self.bspline(u, l) * self.bspline(v, m) * self.bspline(w, n) * self.phi_x[i, iz_loc, iy_loc, ix_loc]
         return T
 # %%
 class Spline1d:
@@ -61,31 +63,27 @@ class Spline1d:
         elif i == 3:
             return u**3 / 6
         
-    def __init__(self, phi_x: np.ndarray, dx: float) -> None:
+    def __init__(self, phi_x: np.ndarray, dx: float, origin: float = -1.0) -> None:
         if not isinstance(phi_x, np.ndarray):
             phi_x = np.array(phi_x)
         assert phi_x.ndim == 1
         self.phi_x = phi_x
         self.dx = dx
+        self.origin = origin
 
-        self.matrix = np.array([
-            [-1, 3, -3, 1],
-            [3, -6, 3, 0],
-            [-3, 0, 3, 0],
-            [1, 4, 1, 0]
-        ])
-
-    def displacement(self, t: np.ndarray) -> np.ndarray:
-        assert t.ndim == 1
+    def displacement(self, _t: np.ndarray) -> np.ndarray:
+        assert _t.ndim == 1
         # x = np.stack([t**3, t**2, t, np.ones_like(t)], axis=1) 
         # return x @ self.matrix @ self.phi_x
+        t = _t - self.origin - self.dx
         x = np.zeros_like(t)
         indices = np.floor(t/self.dx).astype(int)        
-        print(indices)
+        # print(indices)
         for i in range(4):
             
             inds_loc = indices + i
             inds_loc = np.clip(inds_loc, 0, len(self.phi_x)-1) # support outside the domain
+            # print(inds_loc)
             x += self.bspline(t/self.dx - indices, i) * self.phi_x[inds_loc]
         return x
 # %%
@@ -106,14 +104,3 @@ def load_bspline_params(path: Union[str, Path]) -> Dict:
         if '(TransformParameters' in line:
             out["transform_params"] = list(map(float, line.strip('()').split()[1:]))
     return out
-# %%
-def plot_weights(out):
-    axis_order = (2,0,1)
-    nx,ny,nz = [out['grid_size'][i] for i in axis_order]
-    dx,dy,dz = [out['spacing'][i] for i in axis_order]
-    x,y,z = [out['origin'][i] for i in axis_order]
-    
-    p1 = np.array(out['transform_params']).reshape(3,nx,ny,nz)
-    x1 = np.arange(nx)*dx + x
-    plt.plot(x1, p1[:,0,0,2])
-# %%
