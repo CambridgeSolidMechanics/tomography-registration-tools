@@ -35,8 +35,8 @@ class BSplineField(DisplacementField):
         v = y/self.dx - iy + 1
         w = z/self.dx - iz + 1
         T = np.zeros_like(x)
-        for l in range(3):
-            for m in range(3):
-                for n in range(3):
+        for l in range(4):
+            for m in range(4):
+                for n in range(4):
                     T += self.bspline(u, l) * self.bspline(v, m) * self.bspline(w, n) * self.phi_x[ix+l, iy+m, iz+n]
         return T
