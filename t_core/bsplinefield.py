@@ -6,9 +6,27 @@ import yaml
 from functools import lru_cache
 
 from .fields import DisplacementField
-# %%
-class BSplineField:
 
+def load_bspline_params(path: Union[str, Path], units_multiplier: float=1.0) -> Dict:
+    out = {}
+    with open(path, 'r') as f:
+        lines = f.readlines()
+    lines = [line.rstrip('\n') for line in lines]
+    _float = lambda x: units_multiplier*float(x)
+    for line in lines:
+        if 'GridSize' in line:
+            out['grid_size'] = tuple(map(int, line.strip('()').split()[1:]))
+        if 'GridSpacing' in line:
+            out["spacing"] = tuple(map(_float, line.strip('()').split()[1:]))
+        if 'GridOrigin' in line:
+            out["origin"] = tuple(map(_float, line.strip('()').split()[1:]))
+        if '(NumberOfParameters' in line:
+            out["num_params"] = int(line.strip('()').split()[-1])
+        if '(TransformParameters' in line:
+            out["transform_params"] = list(map(_float, line.strip('()').split()[1:]))
+    return out
+
+class BSplineField(DisplacementField):
     @staticmethod
     def bspline(u, i):
         if i == 0:
@@ -50,8 +68,30 @@ class BSplineField:
                     iz_loc = np.clip(iz + n, 0, self.grid_size[2]-1)
                     T += self.bspline(u, l) * self.bspline(v, m) * self.bspline(w, n) * self.phi_x[i, iz_loc, iy_loc, ix_loc]
         return T
-# %%
-class Spline1d:
+    
+    @staticmethod
+    def from_transform_file(path: Union[str, Path], units_multiplier: float = 1.0):
+        params = load_bspline_params(path, units_multiplier)
+        phi_x = np.array(params['transform_params']).reshape(3, *params['grid_size'])
+        return BSplineField(phi_x, params['origin'], params['spacing'])
+    
+    @staticmethod
+    def from_dict(d: Dict):
+        phi_x = np.array(d['phi_x']).reshape(3, *d['grid_size'])
+        return BSplineField(phi_x, d['origin'], d['spacing'])
+    
+    def to_dict(self) -> Dict:
+        return {
+            "class": "BSplineField",
+            "phi_x": self.phi_x.flatten().tolist(),
+            "grid_size": self.grid_size,
+            "origin": self.origin,
+            "spacing": self.spacing
+        }
+
+class _BSplineField1d:
+    """1D B-spline field used for prototyping
+    """
     @staticmethod
     def bspline(u, i):
         if i == 0:
@@ -73,34 +113,11 @@ class Spline1d:
 
     def displacement(self, _t: np.ndarray) -> np.ndarray:
         assert _t.ndim == 1
-        # x = np.stack([t**3, t**2, t, np.ones_like(t)], axis=1) 
-        # return x @ self.matrix @ self.phi_x
         t = _t - self.origin - self.dx
         x = np.zeros_like(t)
         indices = np.floor(t/self.dx).astype(int)        
-        # print(indices)
         for i in range(4):
-            
             inds_loc = indices + i
             inds_loc = np.clip(inds_loc, 0, len(self.phi_x)-1) # support outside the domain
-            # print(inds_loc)
             x += self.bspline(t/self.dx - indices, i) * self.phi_x[inds_loc]
         return x
-# %%
-def load_bspline_params(path: Union[str, Path]) -> Dict:
-    out = {}
-    with open(path, 'r') as f:
-        lines = f.readlines()
-    lines = [line.rstrip('\n') for line in lines]
-    for line in lines:
-        if 'GridSize' in line:
-            out['grid_size'] = tuple(map(int, line.strip('()').split()[1:]))
-        if 'GridSpacing' in line:
-            out["spacing"] = tuple(map(float, line.strip('()').split()[1:]))
-        if 'GridOrigin' in line:
-            out["origin"] = tuple(map(float, line.strip('()').split()[1:]))
-        if '(NumberOfParameters' in line:
-            out["num_params"] = int(line.strip('()').split()[-1])
-        if '(TransformParameters' in line:
-            out["transform_params"] = list(map(float, line.strip('()').split()[1:]))
-    return out
