@@ -72,7 +72,8 @@ class BSplineField(DisplacementField):
     @staticmethod
     def from_transform_file(path: Union[str, Path], units_multiplier: float = 1.0):
         params = load_bspline_params(path, units_multiplier)
-        phi_x = np.array(params['transform_params']).reshape(3, *params['grid_size'])
+        nx, ny, nz = params['grid_size']
+        phi_x = np.array(params['transform_params']).reshape(3, nz, ny, nx)
         return BSplineField(phi_x, params['origin'], params['spacing'])
     
     @staticmethod
