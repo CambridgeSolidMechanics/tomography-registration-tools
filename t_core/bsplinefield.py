@@ -2,7 +2,6 @@ from typing import Callable, Union, Iterable, Tuple, Optional, Dict
 from pathlib import Path
 import numpy as np
 import torch
-import yaml
 from functools import lru_cache
 
 from .fields import DisplacementField
@@ -83,6 +82,9 @@ class BSplineField(DisplacementField):
         self.origin = origin
         self.spacing = spacing
 
+    def __repr__(self) -> str:
+        f = self
+        return f"BSplineField(phi_x={f.phi_x.shape}, origin={f.origin}, spacing={f.spacing})\nfull support on {np.array(f.origin) + np.array(f.spacing)} to {np.array(f.origin) + np.array(f.spacing)*(np.array(f.grid_size)-2)}\n"
 
     def displacement(
             self, 
