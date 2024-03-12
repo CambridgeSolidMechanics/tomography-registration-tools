@@ -12,17 +12,22 @@ def load_bspline_params(path: Union[str, Path], units_multiplier: float=1.0) -> 
         lines = f.readlines()
     lines = [line.rstrip('\n') for line in lines]
     _float = lambda x: units_multiplier*float(x)
+    mappers = {
+        "GridSize": int, "GridSpacing": _float, "GridOrigin": _float, 
+        "Origin": _float, "Spacing": _float, "Size": int, "Index": int,
+        "NumberOfParameters": int, "TransformParameters": _float
+    }
     for line in lines:
-        if 'GridSize' in line:
-            out['grid_size'] = tuple(map(int, line.strip('()').split()[1:]))
-        if 'GridSpacing' in line:
-            out["spacing"] = tuple(map(_float, line.strip('()').split()[1:]))
-        if 'GridOrigin' in line:
-            out["origin"] = tuple(map(_float, line.strip('()').split()[1:]))
-        if '(NumberOfParameters' in line:
-            out["num_params"] = int(line.strip('()').split()[-1])
-        if '(TransformParameters' in line:
-            out["transform_params"] = list(map(_float, line.strip('()').split()[1:]))
+        if line.startswith('//'):
+            continue
+        elif line.startswith('(') and line.endswith(')'):
+            line = line.lstrip('(').rstrip(')')
+            fields = line.split()
+            key = fields[0]
+            if key in mappers:
+                out[key] = list(map(mappers[key], fields[1:]))
+            else:
+                out[key] = ' '.join(fields[1:])
     return out
 
 class BSplineField(DisplacementField):
@@ -56,8 +61,6 @@ class BSplineField(DisplacementField):
     def __init__(
             self, 
             phi_x: Union[torch.Tensor, np.ndarray], 
-            origin=(-1,-1,-1), 
-            spacing=(1,1,1),
             **kwargs
     ) -> None:
         """Set up the B-spline field.
@@ -78,13 +81,24 @@ class BSplineField(DisplacementField):
             phi_x = torch.tensor(phi_x, dtype=torch.float32)
         self.phi_x = phi_x
         _,nx,ny,nz = phi_x.shape
-        self.grid_size = (nx, ny, nz)
-        self.origin = origin
-        self.spacing = spacing
+        self.grid_size = np.array([nx, ny, nz])
+        # provide support for range -1 to 1 along each dimension
+        self.spacing = 2 / (self.grid_size - 3)
+        self.origin = -1 - self.spacing
+
+        # in real coordinates
+        if ('GridOrigin' in kwargs) and ('GridSpacing' in kwargs) and ('GridSize' in kwargs):
+            self.real_spacing = np.array(kwargs['GridSpacing'])
+            self.real_size = np.array(kwargs['GridSize'])
+            assert np.allclose(self.real_size, self.grid_size)
+            self.real_origin = np.array(kwargs['GridOrigin'])
+            # downscale displacements accordingly
+            scale_factor = self.spacing / self.real_spacing
+            self.phi_x *= scale_factor.reshape(3,1,1,1)
 
     def __repr__(self) -> str:
         f = self
-        return f"BSplineField(phi_x={f.phi_x.shape}, origin={f.origin}, spacing={f.spacing})\nfull support on {np.array(f.origin) + np.array(f.spacing)} to {np.array(f.origin) + np.array(f.spacing)*(np.array(f.grid_size)-2)}\n"
+        return f"BSplineField(phi_x={f.phi_x.shape}, origin={f.origin}, spacing={f.spacing})\nfull support on {f.origin + f.spacing} to {f.origin + f.spacing*(f.grid_size-2)}\n"
 
     def displacement(
             self, 
@@ -125,6 +139,37 @@ class BSplineField(DisplacementField):
                     T += self.bspline(u, l) * self.bspline(v, m) * self.bspline(w, n) * self.phi_x[i, ix_loc, iy_loc, iz_loc]
         return T
     
+    def real_displacement(
+            self,
+            x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
+            i: int,
+            **kwargs
+    ) -> torch.Tensor:
+        """Return displacements in real coordinates.
+
+        Unlike the displacement method (which assumes volumes go between -1 and 1),
+        this takes into account the real extent of the volume from elastix.
+
+        Args:
+            x (torch.Tensor): x-coordinates. Can be 1d or meshgrid.
+            y (torch.Tensor): y-coordinates. -"-
+            z (torch.Tensor): z-coordinates. -"-
+            i (int): index of the displacement direction. (x=0, y=1, z=2)
+
+        Returns:
+            torch.Tensor: displacement
+        """
+        # handle 1 element spline using clip
+        size = np.clip(self.real_size-1, 1, a_max=None)*self.real_spacing # in physical coords
+        slope = self.spacing / self.real_spacing
+        intercept = - (1+self.spacing) * (1 + 2*self.real_origin / size)
+        return 1/slope[i] * self.displacement(
+            x*slope[0] + intercept[0],
+            y*slope[1] + intercept[1],
+            z*slope[2] + intercept[2],
+            i
+        )
+
     @staticmethod
     def from_transform_file(
         path: Union[str, Path], units_multiplier: float = 1.0
@@ -145,10 +190,10 @@ class BSplineField(DisplacementField):
             BSplineField
         """
         params = load_bspline_params(path, units_multiplier)
-        nx, ny, nz = params['grid_size']
-        phi_x = np.array(params['transform_params']).reshape(3, nz, ny, nx)
+        nx, ny, nz = params['GridSize']
+        phi_x = np.array(params['TransformParameters']).reshape(3, nz, ny, nx)
         phi_x = phi_x.swapaxes(1,3)
-        return BSplineField(phi_x, params['origin'], params['spacing'])
+        return BSplineField(phi_x, **params)
     
     @staticmethod
     def from_dict(d: Dict) -> "BSplineField":
@@ -190,15 +235,19 @@ class _BSplineField1d:
         elif i == 3:
             return u**3 / 6
         
-    def __init__(self, phi_x: np.ndarray, dx: float, origin: float = -1.0) -> None:
+    def __init__(self, phi_x: np.ndarray) -> None:
         if not isinstance(phi_x, np.ndarray):
             phi_x = np.array(phi_x)
         assert phi_x.ndim == 1
+        assert phi_x.shape[0] > 3
         self.phi_x = phi_x
-        self.dx = dx
-        self.origin = origin
+        # provide support over -1 to 1
+        self.dx = 2/(len(phi_x)-3)
+        self.origin = -1 - self.dx
 
     def displacement(self, _t: np.ndarray) -> np.ndarray:
+        # # support on -1 to 1
+        # _t = 0.5 * (1+_t)*(self.phi_x.shape[0]-3) * self.dx
         assert _t.ndim == 1
         t = _t - self.origin - self.dx
         x = np.zeros_like(t)
