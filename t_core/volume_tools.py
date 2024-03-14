@@ -143,15 +143,34 @@ def load_volume(fn: Union[str, Path], resolution: Iterable[int]) -> np.ndarray:
     vol = vol.swapaxes(0,2)
     return vol
 
-def save_volume(fn: Path, vol: np.ndarray):
+def save_volume(fn: Path, vol: np.ndarray, exportMHDFile: bool = False):
     """Save volume to binary file.
 
     We save the volume with order of dimensions (z,y,x).
     Args:
         fn (Path): output file path
         vol (np.ndarray): 3d volume with order of dimensions (x,y,z)
+        exportMHDFile (bool): if set to True, an .mhd file is also exported which is used by elastix to perform registration
     """
     vol.swapaxes(0,2).flatten().tofile(fn)
+    if exportMHDFile:
+        mhaContent = f'''ObjectType = Image
+                        NDims = 3
+                        BinaryData = True
+                        BinaryDataByteOrderMSB = False
+                        CompressedData = False
+                        TransformMatrix = 1 0 0 0 1 0 0 0 1 
+                        Offset = 0.0 0.0 0.0
+                        CenterOfRotation = 0 0 0
+                        ElementSpacing = 1 1 1
+                        DimSize = {' '.join(map(str, vol.shape))}
+                        AnatomicalOrientation = ??
+                        ElementType = MET_FLOAT
+                        ElementDataFile = {fn}'''
+
+        with open(fn[:fn.find('.')]+'.mhd',"w") as f:
+            f.writelines(mhaContent)
+
 
 def make_volume(size: Tuple[int,int,int], speckle_size: int = 10, convolution_kernel: int = 1) -> np.ndarray:
     """Create synthetic volume with background, material, and texture.
