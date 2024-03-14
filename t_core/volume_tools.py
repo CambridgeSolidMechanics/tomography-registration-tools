@@ -154,7 +154,7 @@ def save_volume(fn: Path, vol: np.ndarray, exportMHDFile: bool = False):
     """
     vol.swapaxes(0,2).flatten().tofile(fn)
     if exportMHDFile:
-        mhaContent = f'''ObjectType = Image
+        mhdContent = f'''ObjectType = Image
                         NDims = 3
                         BinaryData = True
                         BinaryDataByteOrderMSB = False
@@ -169,7 +169,7 @@ def save_volume(fn: Path, vol: np.ndarray, exportMHDFile: bool = False):
                         ElementDataFile = {fn}'''
 
         with open(fn[:fn.find('.')]+'.mhd',"w") as f:
-            f.writelines(mhaContent)
+            f.writelines(mhdContent)
 
 
 def make_volume(size: Tuple[int,int,int], speckle_size: int = 10, convolution_kernel: int = 1) -> np.ndarray:
