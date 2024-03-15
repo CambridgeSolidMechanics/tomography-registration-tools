@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import cv2 as cv
 from statsmodels.tsa.stattools import acf
 import yaml
+from os.path import basename
 
 def displace_rigid_xyz(vol: np.ndarray, disp: Iterable[int]) -> np.ndarray:
     """Deform by rigid body displacement
@@ -155,18 +156,18 @@ def save_volume(fn: Path, vol: np.ndarray, exportMHDFile: bool = False):
     vol.swapaxes(0,2).flatten().tofile(fn)
     if exportMHDFile:
         mhdContent = f'''ObjectType = Image
-                        NDims = 3
-                        BinaryData = True
-                        BinaryDataByteOrderMSB = False
-                        CompressedData = False
-                        TransformMatrix = 1 0 0 0 1 0 0 0 1 
-                        Offset = 0.5 0.5 0.5
-                        CenterOfRotation = 0 0 0
-                        ElementSpacing = 1 1 1
-                        DimSize = {' '.join(map(str, vol.shape))}
-                        AnatomicalOrientation = ??
-                        ElementType = MET_FLOAT
-                        ElementDataFile = {fn}'''
+NDims = 3
+BinaryData = True
+BinaryDataByteOrderMSB = False
+CompressedData = False
+TransformMatrix = 1 0 0 0 1 0 0 0 1 
+Offset = 0.5 0.5 0.5
+CenterOfRotation = 0 0 0
+ElementSpacing = 1 1 1
+DimSize = {' '.join(map(str, vol.shape))}
+AnatomicalOrientation = ??
+ElementType = MET_FLOAT
+ElementDataFile = {basename(fn)}'''
 
         with open(fn[:fn.find('.')]+'.mhd',"w") as f:
             f.writelines(mhdContent)
@@ -335,3 +336,25 @@ def select_points_in_volume(
     cv.waitKey()
     cv.destroyAllWindows()
     return points
+
+def remap_volume(vol: np.array, minVal: float, maxVal: float) -> np.array:
+    """Remaps grayscale values of vol in (minVal, maxVal) range to (0.0, 1.0).
+    Gray scale values
+        - below minVal are set to 0.0
+        - above maxVal are set to 1.0
+        - between minVal and maxVal are mapped linearly between 0.0 and 1.0
+
+    Args:
+        vol (np.ndarray): 3d volume
+        minVal (float): grayscale values below this would be mapped to 0.0
+        maxVal (float): grayscale values above this would be mapped to 1.0
+
+    Returns:
+        np.array: remapped volume
+    """
+    remappedVol = vol.copy()
+    remappedVol[vol<=minVal] = 0.0
+    remappedVol[vol>=maxVal] = 1.0
+    mask = (vol>minVal) & (vol<maxVal)
+    remappedVol[mask] = (vol[mask]-minVal)/(maxVal-minVal)
+    return remappedVol
