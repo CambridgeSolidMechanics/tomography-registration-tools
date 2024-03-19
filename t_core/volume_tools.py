@@ -337,24 +337,24 @@ def select_points_in_volume(
     cv.destroyAllWindows()
     return points
 
-def remap_volume(vol: np.array, minVal: float, maxVal: float) -> np.array:
+def remap_volume(vol: np.array, minVal: float, maxVal: float, notch: bool = False) -> np.array:
     """Remaps grayscale values of vol in (minVal, maxVal) range to (0.0, 1.0).
     Gray scale values
         - below minVal are set to 0.0
-        - above maxVal are set to 1.0
+        - above maxVal are set to 1.0 if notch is False, else these values are also set to 0.0
         - between minVal and maxVal are mapped linearly between 0.0 and 1.0
-
     Args:
         vol (np.ndarray): 3d volume
         minVal (float): grayscale values below this would be mapped to 0.0
-        maxVal (float): grayscale values above this would be mapped to 1.0
+        maxVal (float): grayscale values above this would be mapped to 1.0 or 0.0 based on notch
+        notch (bool): if True grayscale values above maxVal are set to 0.0 else 1.0
 
     Returns:
         np.array: remapped volume
     """
     remappedVol = vol.copy()
     remappedVol[vol<=minVal] = 0.0
-    remappedVol[vol>=maxVal] = 1.0
+    remappedVol[vol>=maxVal] = 0.0 if notch else 1.0
     mask = (vol>minVal) & (vol<maxVal)
     remappedVol[mask] = (vol[mask]-minVal)/(maxVal-minVal)
     return remappedVol

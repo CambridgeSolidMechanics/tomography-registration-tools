@@ -86,6 +86,9 @@ class BSplineField(DisplacementField):
         self.spacing = 2 / (self.grid_size - 3)
         self.origin = -1 - self.spacing
 
+        # There are parameters from the transform file. Sometimes useful for plotting
+        self.paramsFromFile = kwargs 
+
         # in real coordinates
         if ('GridOrigin' in kwargs) and ('GridSpacing' in kwargs) and ('GridSize' in kwargs):
             self.real_spacing = np.array(kwargs['GridSpacing'])
