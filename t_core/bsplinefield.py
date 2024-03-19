@@ -61,6 +61,7 @@ class BSplineField(DisplacementField):
     def __init__(
             self, 
             phi_x: Union[torch.Tensor, np.ndarray], 
+            support_outside: bool = False,
             **kwargs
     ) -> None:
         """Set up the B-spline field.
@@ -68,10 +69,8 @@ class BSplineField(DisplacementField):
         Args:
             phi_x (Union[torch.Tensor, np.ndarray]): degrees of freedom 
                 of the B-spline field in order [dim, nx, ny, nz]
-            origin (tuple, optional): coordinates of the first control point. 
-                Defaults to (-1,-1,-1).
-            spacing (tuple, optional): spacing between control points 
-                along each dimension. Defaults to (1,1,1).
+            support_outside (bool, optional): whether to provide support
+                for locations outside the control points. Defaults to False.
         """
         super().__init__()
         if 'class' in kwargs:
@@ -85,6 +84,7 @@ class BSplineField(DisplacementField):
         # provide support for range -1 to 1 along each dimension
         self.spacing = 2 / (self.grid_size - 3)
         self.origin = -1 - self.spacing
+        self.support_outside = support_outside
 
         # in real coordinates
         if ('GridOrigin' in kwargs) and ('GridSpacing' in kwargs) and ('GridSize' in kwargs):
@@ -126,6 +126,10 @@ class BSplineField(DisplacementField):
         ix = torch.floor(u).long()
         iy = torch.floor(v).long()
         iz = torch.floor(w).long()
+        if not self.support_outside:
+            ix_nan = (ix < 0) | (ix >= self.grid_size[0]-3)
+            iy_nan = (iy < 0) | (iy >= self.grid_size[1]-3)
+            iz_nan = (iz < 0) | (iz >= self.grid_size[2]-3)
         u = u - ix
         v = v - iy
         w = w - iz
@@ -137,6 +141,8 @@ class BSplineField(DisplacementField):
                 for n in range(4):
                     iz_loc = torch.clamp(iz + n, 0, self.grid_size[2]-1)
                     T += self.bspline(u, l) * self.bspline(v, m) * self.bspline(w, n) * self.phi_x[i, ix_loc, iy_loc, iz_loc]
+        if not self.support_outside:
+            T[ix_nan | iy_nan | iz_nan] = torch.nan
         return T
     
     def real_displacement(
@@ -235,7 +241,7 @@ class _BSplineField1d:
         elif i == 3:
             return u**3 / 6
         
-    def __init__(self, phi_x: np.ndarray) -> None:
+    def __init__(self, phi_x: np.ndarray, support_outside: bool = False) -> None:
         if not isinstance(phi_x, np.ndarray):
             phi_x = np.array(phi_x)
         assert phi_x.ndim == 1
@@ -244,6 +250,7 @@ class _BSplineField1d:
         # provide support over -1 to 1
         self.dx = 2/(len(phi_x)-3)
         self.origin = -1 - self.dx
+        self.support_outside = support_outside
 
     def displacement(self, _t: np.ndarray) -> np.ndarray:
         # # support on -1 to 1
@@ -252,8 +259,17 @@ class _BSplineField1d:
         t = _t - self.origin - self.dx
         x = np.zeros_like(t)
         indices = np.floor(t/self.dx).astype(int)        
+        if not self.support_outside:
+            invalid = (indices < 0) | (indices >= len(self.phi_x)-3)
+            valid = ~invalid
+            x[invalid] = np.nan
+        else:
+            valid = np.ones_like(indices, dtype=bool)
+
         for i in range(4):
-            inds_loc = indices + i
-            inds_loc = np.clip(inds_loc, 0, len(self.phi_x)-1) # support outside the domain
-            x += self.bspline(t/self.dx - indices, i) * self.phi_x[inds_loc]
+            inds_loc = indices[valid] + i
+            if self.support_outside:
+                inds_loc = np.clip(inds_loc, 0, len(self.phi_x)-1) # support outside the domain
+            x[valid] += self.bspline(t[valid]/self.dx - indices[valid], i) * self.phi_x[inds_loc]
+
         return x
