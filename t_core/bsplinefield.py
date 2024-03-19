@@ -105,7 +105,9 @@ class BSplineField(DisplacementField):
 
     def displacement(
             self, 
-            x: torch.Tensor, y: torch.Tensor, z: torch.Tensor, 
+            x: Union[torch.Tensor, np.ndarray],
+            y: Union[torch.Tensor, np.ndarray],
+            z: Union[torch.Tensor, np.ndarray],
             i: int, 
             **kwargs
     ) -> torch.Tensor:
@@ -114,14 +116,18 @@ class BSplineField(DisplacementField):
         We implement support for locations beyond control points.
 
         Args:
-            x (torch.Tensor): x-coordinates. Can be 1d or meshgrid.
-            y (torch.Tensor): y-coordinates. -"-
-            z (torch.Tensor): z-coordinates. -"-
+            x (Union[torch.Tensor, np.ndarray]): x-coordinates. Can be 1d or meshgrid.
+            y (Union[torch.Tensor, np.ndarray]): y-coordinates. -"-
+            z (Union[torch.Tensor, np.ndarray]): z-coordinates. -"-
             i (int): index of the displacement direction. (x=0, y=1, z=2)
 
         Returns:
             torch.Tensor: displacement
         """
+        x = torch.Tensor(x)
+        y = torch.Tensor(y)
+        z = torch.Tensor(z)
+        
         dx, dy, dz = self.spacing
         u = (x - self.origin[0] - dx)/dx
         v = (y - self.origin[1] - dy)/dy
