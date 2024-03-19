@@ -86,7 +86,7 @@ class BSplineField(DisplacementField):
         self.origin = -1 - self.spacing
         self.support_outside = support_outside
 
-        # There are parameters from the transform file. Sometimes useful for plotting
+        # These are parameters from the transform file. Sometimes useful for plotting.
         self.paramsFromFile = kwargs 
 
         # in real coordinates
