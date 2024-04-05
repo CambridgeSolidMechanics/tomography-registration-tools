@@ -192,6 +192,11 @@ class UniformStrainDisplacementField(DisplacementField):
         if 'class' in kwargs:
             assert kwargs['class'] == 'UniformStrainDisplacementField'
         self.eps_xyz = eps_xyz
+        if 'offset' in kwargs:
+            self.offset_xyz = kwargs['offset_xyz']
+            assert len(self.offset_xyz)==3
+        else:
+            self.offset_xyz = [0.0, 0.0, 0.0]
     
     def displacement(
             self, 
@@ -199,11 +204,11 @@ class UniformStrainDisplacementField(DisplacementField):
             i: int,
     ) -> torch.Tensor:
         if i == 0:
-            return self.eps_xyz[i]*x
+            return self.eps_xyz[i]*(x-self.offset_xyz[i])
         elif i == 1:
-            return self.eps_xyz[i]*y
+            return self.eps_xyz[i]*(y-self.offset_xyz[i])
         elif i == 2:
-            return self.eps_xyz[i]*z
+            return self.eps_xyz[i]*(z-self.offset_xyz[i])
     
     def to_dict(self) -> Dict:
         return {
