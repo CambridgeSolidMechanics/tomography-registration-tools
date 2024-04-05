@@ -21,6 +21,7 @@ def applyDef(volFileName,
              defName,
              defType,
              eps_xyz=None,
+             offset_xyz=None,
              sigma_vox=None,
              A_vox=None):
     
@@ -33,7 +34,7 @@ def applyDef(volFileName,
     for x,y in zip(resolution, vol.shape):
         assert x==y
     if defType == 'Uniform':
-        f = fields.UniformStrainDisplacementField(eps_xyz=eps_xyz)
+        f = fields.UniformStrainDisplacementField(eps_xyz=eps_xyz, offset_xyz=offset_xyz)
     elif defType == 'Gaussian':
         pos = [[r//2 for r in resolution]]
     
@@ -116,6 +117,7 @@ def submit():
                 defType=deformation_type,
                 sigma_vox=sig_vox,
                 A_vox=amp_z)
+        
     status.config(text = 'open to inputs', bg='green')
 
 def browse_volume():
