@@ -192,7 +192,7 @@ class UniformStrainDisplacementField(DisplacementField):
         if 'class' in kwargs:
             assert kwargs['class'] == 'UniformStrainDisplacementField'
         self.eps_xyz = eps_xyz
-        if 'offset' in kwargs:
+        if 'offset_xyz' in kwargs:
             self.offset_xyz = kwargs['offset_xyz']
             assert len(self.offset_xyz)==3
         else:
@@ -213,7 +213,8 @@ class UniformStrainDisplacementField(DisplacementField):
     def to_dict(self) -> Dict:
         return {
             'class': 'UniformStrainDisplacementField',
-            'eps_xyz': self.eps_xyz
+            'eps_xyz': self.eps_xyz,
+            'offset_xyz': self.offset_xyz
         }
     
     @staticmethod
