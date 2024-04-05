@@ -164,7 +164,7 @@ if __name__=='__main__':
     eps_x_label = tk.Label(root, text="Epsilon_x:")
     eps_x_label.grid(row=3, column=0, sticky="w")
 
-    eps_x_entry = tk.Entry(root, width=50)
+    eps_x_entry = tk.Entry(root, width=15)
     eps_x_entry.insert(0, '0.0')
     eps_x_entry.grid(row=3, column=1, padx=10, pady=5)
 
@@ -172,7 +172,7 @@ if __name__=='__main__':
     eps_y_label = tk.Label(root, text="Epsilon_y:")
     eps_y_label.grid(row=4, column=0, sticky="w")
 
-    eps_y_entry = tk.Entry(root, width=50)
+    eps_y_entry = tk.Entry(root, width=15)
     eps_y_entry.insert(0, '0.0')
     eps_y_entry.grid(row=4, column=1, padx=10, pady=5)
 
@@ -180,7 +180,7 @@ if __name__=='__main__':
     eps_z_label = tk.Label(root, text="Epsilon_z:")
     eps_z_label.grid(row=5, column=0, sticky="w")
 
-    eps_z_entry = tk.Entry(root, width=50)
+    eps_z_entry = tk.Entry(root, width=15)
     eps_z_entry.insert(0, '0.0')
     eps_z_entry.grid(row=5, column=1, padx=10, pady=5)
 
@@ -188,7 +188,7 @@ if __name__=='__main__':
     offset_x_label = tk.Label(root, text="Offset_x:")
     offset_x_label.grid(row=3, column=2, sticky="w")
 
-    offset_x_entry = tk.Entry(root, width=50)
+    offset_x_entry = tk.Entry(root, width=15)
     offset_x_entry.insert(0, '0.0')
     offset_x_entry.grid(row=3, column=3, padx=10, pady=5)
 
@@ -196,7 +196,7 @@ if __name__=='__main__':
     offset_y_label = tk.Label(root, text="Offset_y:")
     offset_y_label.grid(row=4, column=2, sticky="w")
 
-    offset_y_entry = tk.Entry(root, width=50)
+    offset_y_entry = tk.Entry(root, width=15)
     offset_y_entry.insert(0, '0.0')
     offset_y_entry.grid(row=4, column=3, padx=10, pady=5)
 
@@ -204,7 +204,7 @@ if __name__=='__main__':
     offset_z_label = tk.Label(root, text="Offset_z:")
     offset_z_label.grid(row=5, column=2, sticky="w")
 
-    offset_z_entry = tk.Entry(root, width=50)
+    offset_z_entry = tk.Entry(root, width=15)
     offset_z_entry.insert(0, '0.0')
     offset_z_entry.grid(row=5, column=3, padx=10, pady=5)
 
