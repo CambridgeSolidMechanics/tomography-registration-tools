@@ -144,7 +144,42 @@ def load_volume(fn: Union[str, Path], resolution: Iterable[int]) -> np.ndarray:
     vol = vol.swapaxes(0,2)
     return vol
 
-def save_volume(fn: Path, vol: np.ndarray, exportMHDFile: bool = False):
+def write_MHD_file(fn:Path,
+                   offset: Union[list, tuple, np.array] = None,
+                   elementSpacing: Union[list, tuple, np.array] = None,
+                   resolution: Union[list, tuple, np.array] = None):
+    """Save volume to binary file.
+
+    We save the volume with order of dimensions (z,y,x).
+    Args:
+        fn (Path): volume output file path
+        offset (Union[list, tuple, np.array]): offset for writing mhd file, defaults to 0.5, 0.5, 0.5 if argument not supplied
+        elementSpacing (Union[list, tuple, np.array]): element spacing for writing mhd file, defaults to 1, 1, 1 if argument not supplied
+        resolution (Union[list, tuple, np.array]): resolution of the volume
+    """
+    mhdContent = f'''ObjectType = Image
+NDims = 3
+BinaryData = True
+BinaryDataByteOrderMSB = False
+CompressedData = False
+TransformMatrix = 1 0 0 0 1 0 0 0 1 
+Offset = {' '.join(map(str, offset)) if offset else '0.5 0.5 0.5'},
+CenterOfRotation = 0 0 0
+ElementSpacing = {' '.join(map(str, elementSpacing)) if offset else '1 1 1'}
+DimSize = {' '.join(map(str, resolution))}
+AnatomicalOrientation = ??
+ElementType = MET_FLOAT
+ElementDataFile = {basename(fn)}'''
+
+    with open(''.join(fn.split('.')[:-1]+['.mhd']),"w") as f:
+        f.writelines(mhdContent)
+
+def save_volume(fn: Path,
+                vol: np.ndarray,
+                exportMHDFile: bool = False,
+                offset: Union[list, tuple, np.array] = None,
+                elementSpacing: Union[list, tuple, np.array] = None
+                ):
     """Save volume to binary file.
 
     We save the volume with order of dimensions (z,y,x).
@@ -152,25 +187,15 @@ def save_volume(fn: Path, vol: np.ndarray, exportMHDFile: bool = False):
         fn (Path): output file path
         vol (np.ndarray): 3d volume with order of dimensions (x,y,z)
         exportMHDFile (bool): if set to True, an .mhd file is also exported which is used by elastix to perform registration
+        offset (Union[list, tuple, np.array]): offset for writing mhd file, defaults to 0.5, 0.5, 0.5 if argument not supplied
+        elementSpacing (Union[list, tuple, np.array]): element spacing for writing mhd file, defaults to 1, 1, 1 if argument not supplied
     """
     vol.swapaxes(0,2).flatten().tofile(fn)
     if exportMHDFile:
-        mhdContent = f'''ObjectType = Image
-NDims = 3
-BinaryData = True
-BinaryDataByteOrderMSB = False
-CompressedData = False
-TransformMatrix = 1 0 0 0 1 0 0 0 1 
-Offset = 0.5 0.5 0.5
-CenterOfRotation = 0 0 0
-ElementSpacing = 1 1 1
-DimSize = {' '.join(map(str, vol.swapaxes(0,2).shape))}
-AnatomicalOrientation = ??
-ElementType = MET_FLOAT
-ElementDataFile = {basename(fn)}'''
-
-        with open(fn[:fn.find('.')]+'.mhd',"w") as f:
-            f.writelines(mhdContent)
+        write_MHD_file(fn=fn,
+                       offset=offset,
+                       elementSpacing=elementSpacing,
+                       resolution=vol.shape)
 
 
 def make_volume(size: Tuple[int,int,int], speckle_size: int = 10, convolution_kernel: int = 1) -> np.ndarray:
