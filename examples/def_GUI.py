@@ -62,7 +62,15 @@ def applyDef(volFileName,
     
     # fn = asksaveasfilename(initialdir='.', title='deformed volume file', defaultextension='.raw')
     fn = volFileName[:-4]+'_'+defName+'.raw'
-    vt.save_volume(fn, undef_vol)
+    if MHD_toggle_state.get():
+        vt.save_volume(fn,
+                       undef_vol,
+                       exportMHDFile = True,
+                       offset = [s/2 for s in spacing],
+                       elementSpacing = spacing)
+    else:
+        vt.save_volume(fn, undef_vol)
+
     (fold / Path(f'resolution_{defName}.txt')).write_text('x'.join(map(str, vol.shape)))
 
 
@@ -126,7 +134,9 @@ def browse_volume():
     volume_entry.insert(0, volume_path)
 
 if __name__=='__main__':
-    resolution = [int(x) for x in Path('./resolution.txt').read_text().split('\n')[0].split('x')]
+    resFile = Path('./resolution.txt').read_text().split('\n')
+    resolution = [int(x) for x in resFile[0].split('x')]
+    spacing = [float(x)/1000 for x in resFile[1].split('x')]
     
     root = tk.Tk()
     root.title("Deformation Parameters")
@@ -272,6 +282,13 @@ if __name__=='__main__':
     # Submit button
     submit_button = tk.Button(root, text="Submit", command=submit)
     submit_button.grid(row=6, column=1, pady=10)
+
+    # Write MHD File Toggle
+    # MHD_File_label = tk.Label(root, text="Write .mhd :")
+    # MHD_File_label.grid(row=6, column=0, sticky="w")
+    MHD_toggle_state = tk.BooleanVar()
+    MHD_File_toggle = tk.Checkbutton(root, text = 'Write .mhd file', variable=MHD_toggle_state)
+    MHD_File_toggle.grid(row=6, column=0, padx=10, pady=5)
 
     # Log Window
     log_frame = tk.Frame(root)
