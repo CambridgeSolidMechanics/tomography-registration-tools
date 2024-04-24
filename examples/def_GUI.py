@@ -23,37 +23,41 @@ def applyDef(volFileName,
              eps_xyz=None,
              offset_xyz=None,
              sigma_vox=None,
-             A_vox=None):
+             A_vox=None,
+             vol=None):
     
     # volFileName = askopenfilename(initialdir='.', title='Volume to be deformed')
-    vol = vt.load_volume(
-        volFileName,
-        resolution=resolution,
-    )
-    update_log('Loaded volume')
+    if not vol:  
+        vol = vt.load_volume(
+            volFileName,
+            resolution=resolution,
+        )
+        update_log('Loaded volume')
+    else:
+        update_log('Volume given')
     for x,y in zip(resolution, vol.shape):
         assert x==y
     if defType == 'Uniform':
         f = fields.UniformStrainDisplacementField(eps_xyz=eps_xyz, offset_xyz=offset_xyz)
     elif defType == 'Gaussian':
-        pos = [[r//2 for r in resolution]]
+        pos = [r//2 for r in resolution]
     
         L_x = resolution[0] / 2
         L_y = resolution[1] / 2
         L_z = resolution[2] / 2
-        for i in range(len(pos)):
-            c_x, c_y, c_z = pos[i]
-            c_x = c_x / L_x - 1
-            c_y = c_y / L_y - 1
-            c_z = c_z / L_z - 1
-            pos[i] = (c_x, c_y, c_z)
+
+        c_x, c_y, c_z = pos
+        c_x = c_x / L_x - 1
+        c_y = c_y / L_y - 1
+        c_z = c_z / L_z - 1
+        pos = (c_x, c_y, c_z)
             
         s_x = sigma_vox / L_x
         s_y = sigma_vox / L_y
         s_z = sigma_vox / L_z
         A_z = A_vox / L_z
         
-        f = fields.AdditiveFieldArray([ fields.GaussianDisplacementField((s_x,s_y,s_z), (0,0,A_z), p) for p in pos ])
+        f = fields.GaussianDisplacementField((s_x,s_y,s_z), (0,0,A_z), pos)
         
     f.to_yaml(f'field_{defName}.yaml')
     undef_vol = f(vol)
@@ -75,10 +79,13 @@ def applyDef(volFileName,
 
 
 def update_log(message):
-    log_text.insert(tk.END, message + "\n")
-    log_text.see(tk.END)
-    root.update()
-
+    if __name__=='__main__':
+        log_text.insert(tk.END, message + "\n")
+        log_text.see(tk.END)
+        root.update()
+    else:
+        print(message)
+        
 def submit():
     status.config(text = 'Busy', bg='red')
     volume_path = volume_entry.get()
