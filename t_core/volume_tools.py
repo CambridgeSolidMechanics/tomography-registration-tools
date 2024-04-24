@@ -124,7 +124,7 @@ def plot_volume(vol: np.ndarray):
     fig.tight_layout()
     plt.show()
 
-def load_volume(fn: Union[str, Path], resolution: Iterable[int]) -> np.ndarray:
+def load_volume(fn: Union[str, Path], resolution: Iterable[int], dtype=np.float32) -> np.ndarray:
     """Load volume data from binary file.
 
     By convention, the order of the input dimensions (e.g. in VG Studio) 
@@ -132,6 +132,7 @@ def load_volume(fn: Union[str, Path], resolution: Iterable[int]) -> np.ndarray:
     Args:
         fn (Union[str, Path]): file name
         resolution (Iterable[int]): [x,y,z] resolution in voxels
+        dtype (Optional, np.dtype): data type of the volume. Defaults to np.float32.
 
     Returns:
         np.ndarray: volume with ndim=3 and shape (x,y,z)
@@ -139,15 +140,15 @@ def load_volume(fn: Union[str, Path], resolution: Iterable[int]) -> np.ndarray:
     if isinstance(fn, str):
         fn = Path(fn)
     assert fn.exists()
-    data = np.fromfile(fn, dtype=np.float32)
+    data = np.fromfile(fn, dtype=dtype)
     vol = data.reshape([resolution[i] for i in [2,1,0]])
     vol = vol.swapaxes(0,2)
     return vol
 
 def write_MHD_file(fn:Path,
-                   offset: Union[list, tuple, np.array] = None,
-                   elementSpacing: Union[list, tuple, np.array] = None,
-                   resolution: Union[list, tuple, np.array] = None):
+                   offset: Union[list, tuple, np.ndarray] = None,
+                   elementSpacing: Union[list, tuple, np.ndarray] = None,
+                   resolution: Union[list, tuple, np.ndarray] = None):
     """Save volume to binary file.
 
     We save the volume with order of dimensions (z,y,x).
