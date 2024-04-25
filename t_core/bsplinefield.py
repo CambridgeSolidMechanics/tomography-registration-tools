@@ -137,7 +137,7 @@ class BSplineField3d(DisplacementField):
             y = y.ravel()
             z = z.ravel()
 
-        A = self.get_A_matrix(x, y, z)
+        A = self.get_A_matrix(x, y, z).float()
         u = A @ self.phi_x[i].ravel()
 
         if len(shape) > 1:
@@ -175,9 +175,9 @@ class BSplineField3d(DisplacementField):
         ix = torch.floor(u).long()
         iy = torch.floor(v).long()
         iz = torch.floor(w).long()
-        u = (u - ix).to(torch.float32)
-        v = (v - iy).to(torch.float32)
-        w = (w - iz).to(torch.float32)
+        u = (u - ix).to(torch.float64)
+        v = (v - iy).to(torch.float64)
+        w = (w - iz).to(torch.float64)
         ind_x = (ix[:, None] + torch.arange(4, device=ix.device)).repeat_interleave(16, dim=1)
         ind_y = (iy[:, None] + torch.arange(4, device=iy.device)).repeat(1, 4).repeat_interleave(4, dim=1)
         ind_z = (iz[:, None] + torch.arange(4, device=iz.device)).repeat(1, 16)
@@ -189,7 +189,7 @@ class BSplineField3d(DisplacementField):
         weights_y = torch.stack([self.bspline(v, i) for i in range(4)], dim=1)
         weights_z = torch.stack([self.bspline(w, i) for i in range(4)], dim=1)
         weights = torch.einsum('pi,pj,pk->pijk', weights_x, weights_y, weights_z).reshape(npoints, 64)
-        A = torch.zeros((npoints, nx*ny*nz), device=x.device, dtype=torch.float32)
+        A = torch.zeros((npoints, nx*ny*nz), device=x.device, dtype=torch.float64)
         A[torch.arange(npoints)[:,None], flat_index] = weights
         if not self.support_outside:
             A[out_of_support] = torch.nan
@@ -229,17 +229,16 @@ class BSplineField3d(DisplacementField):
     def compute_weights_from_displacement(
             self, 
             x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
-            u: torch.Tensor,
-            return_full: bool = False
+            u: torch.Tensor
     ) -> np.ndarray:
         # use double precision for stability
         assert x.ndim==1 and y.ndim==1 and z.ndim==1 and u.ndim==1
         A = self.get_A_matrix(x,y,z).double()
         u = u.double()
-        if return_full:
-            return torch.linalg.lstsq(A, u, rcond=None)
-        else:
-            return torch.linalg.lstsq(A, u, rcond=None).solution.float()
+        weights = torch.linalg.lstsq(A, u, rcond=None).solution.float()
+        # reshape to 3d. However, this  still only gives 
+        # the weights for one component of the displacement
+        return weights.reshape(1, *self.grid_size)
 
     @staticmethod
     def from_transform_file(
