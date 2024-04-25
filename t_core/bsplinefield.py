@@ -30,7 +30,7 @@ def load_bspline_params(path: Union[str, Path], units_multiplier: float=1.0) -> 
                 out[key] = ' '.join(fields[1:])
     return out
 
-class NewBSplineField(DisplacementField):
+class BSplineField3d(DisplacementField):
     """Cubic B-spline 3d field.
     """
     @staticmethod
@@ -145,7 +145,27 @@ class NewBSplineField(DisplacementField):
         else:
             return u
         
-    def get_A_matrix(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:        
+    def get_A_matrix(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+        """Calculate the A-matrix.
+
+        Displacements are then given by
+        ..math::
+            u(x) = A(x) \phi_x
+        where A(x) is the 2d matrix of B-spline weights evaluated 
+        at x and \phi_x is the 1d vector of B-spline degrees of freedom. 
+        The matrix can be used to calculate the displacement at x 
+        or to infer weights from displacements.
+
+        Args:
+            x (torch.Tensor): x-position. Must be 1d. Shape [npoints]
+            y (torch.Tensor): y-position. -"-
+            z (torch.Tensor): z-position. -"-
+
+        Returns:
+            torch.Tensor: Matrix of shape [npoints, nx*ny*nz]
+        """
+        assert x.ndim == 1 and y.ndim == 1 and z.ndim == 1
+        assert x.shape[0] == y.shape[0] == z.shape[0]
         dx, dy, dz = self.spacing
         nx, ny, nz = self.grid_size
         npoints = x.shape[0]
@@ -206,216 +226,25 @@ class NewBSplineField(DisplacementField):
             i
         )
 
-    @staticmethod
-    def from_transform_file(
-        path: Union[str, Path], units_multiplier: float = 1.0
-    ) -> "BSplineField":
-        """Load B-spline field from transform file.
-
-        The transform file is deemed to follow the transformix convention.
-        Importantly, the degrees of freedom of the b-splines are saved in
-        order: [dim, nz, ny, nx]. We convert to order [dim, nx, ny, nz].
-
-        Args:
-            path (Union[str, Path]): path to transform file
-            units_multiplier (float, optional): number by which to scale 
-                length units - e.g. to go from mm to um, use 1000.
-                Defaults to 1.0.
-
-        Returns:
-            BSplineField
-        """
-        params = load_bspline_params(path, units_multiplier)
-        nx, ny, nz = params['GridSize']
-        phi_x = np.array(params['TransformParameters']).reshape(3, nz, ny, nx)
-        phi_x = phi_x.swapaxes(1,3)
-        return BSplineField(phi_x, **params)
-    
-    @staticmethod
-    def from_dict(d: Dict) -> "BSplineField":
-        """Load field from dictionary.
-
-        Our convention is to save b-spline dof in order [dim, nx, ny, nz].
-
-        Args:
-            d (Dict): dictionary with field parameters
-
-        Returns:
-            BSplineField
-        """
-        phi_x = np.array(d['phi_x']).reshape(3, *d['grid_size'])
-        kwargs = {key:val for key,val in d.items() if key not in ['phi_x']}
-        kwargs['phi_x'] = phi_x
-        return BSplineField(**kwargs)
-    
-    def to_dict(self) -> Dict:
-        return {
-            "class": "BSplineField",
-            "phi_x": self.phi_x.flatten().tolist(),
-            "grid_size": self.grid_size,
-            "origin": self.origin,
-            "spacing": self.spacing
-        }
-
-class BSplineField(DisplacementField):
-    """Cubic B-spline 3d field.
-    """
-    
-    @staticmethod
-    @lru_cache
-    def bspline(u: torch.Tensor, i: int) -> torch.Tensor:
-        """B-spline functions.
-
-        Using lru_cache to speed up the computation if 
-        the same u and i are used multiple times.
-
-        Args:
-            u (torch.Tensor): coordinate in domain
-            i (int): index of the B-spline. One of {0,1,2,3}
-
-        Returns:
-            torch.Tensor: B-spline weight
-        """
-        if i == 0:
-            return (1 - u)**3 / 6
-        elif i == 1:
-            return (3*u**3 - 6*u**2 + 4) / 6
-        elif i == 2:
-            return (-3*u**3 + 3*u**2 + 3*u + 1) / 6
-        elif i == 3:
-            return u**3 / 6
-
-    def __init__(
+    def compute_weights_from_displacement(
             self, 
-            phi_x: Union[torch.Tensor, np.ndarray], 
-            support_outside: bool = False,
-            **kwargs
-    ) -> None:
-        """Set up the B-spline field.
-
-        Args:
-            phi_x (Union[torch.Tensor, np.ndarray]): degrees of freedom 
-                of the B-spline field in order [dim, nx, ny, nz]
-            support_outside (bool, optional): whether to provide support
-                for locations outside the control points. Defaults to False.
-        """
-        super().__init__()
-        if 'class' in kwargs:
-            assert kwargs['class'] == 'BSplineField'
-        assert phi_x.ndim == 4
-        if isinstance(phi_x, np.ndarray):
-            phi_x = torch.tensor(phi_x, dtype=torch.float32)
-        self.phi_x = phi_x
-        _,nx,ny,nz = phi_x.shape
-        self.grid_size = np.array([nx, ny, nz])
-        # provide support for range -1 to 1 along each dimension
-        self.spacing = 2 / (self.grid_size - 3)
-        self.origin = -1 - self.spacing
-        self.support_outside = support_outside
-
-        # These are parameters from the transform file. Sometimes useful for plotting.
-        self.paramsFromFile = kwargs 
-
-        # in real coordinates
-        if ('GridOrigin' in kwargs) and ('GridSpacing' in kwargs) and ('GridSize' in kwargs):
-            self.real_spacing = np.array(kwargs['GridSpacing'])
-            self.real_size = np.array(kwargs['GridSize'])
-            assert np.allclose(self.real_size, self.grid_size)
-            self.real_origin = np.array(kwargs['GridOrigin'])
-            # downscale displacements accordingly
-            scale_factor = self.spacing / self.real_spacing
-            self.phi_x *= scale_factor.reshape(3,1,1,1)
-
-    def __repr__(self) -> str:
-        f = self
-        return f"BSplineField(phi_x={f.phi_x.shape}, origin={f.origin}, spacing={f.spacing})\nfull support on {f.origin + f.spacing} to {f.origin + f.spacing*(f.grid_size-2)}\n"
-
-    def displacement(
-            self, 
-            x: Union[torch.Tensor, np.ndarray],
-            y: Union[torch.Tensor, np.ndarray],
-            z: Union[torch.Tensor, np.ndarray],
-            i: int, 
-            **kwargs
-    ) -> torch.Tensor:
-        """Displacement at points x,y,z in the direction i.
-
-        We implement support for locations beyond control points.
-
-        Args:
-            x (Union[torch.Tensor, np.ndarray]): x-coordinates. Can be 1d or meshgrid.
-            y (Union[torch.Tensor, np.ndarray]): y-coordinates. -"-
-            z (Union[torch.Tensor, np.ndarray]): z-coordinates. -"-
-            i (int): index of the displacement direction. (x=0, y=1, z=2)
-
-        Returns:
-            torch.Tensor: displacement
-        """
-        x = torch.Tensor(x)
-        y = torch.Tensor(y)
-        z = torch.Tensor(z)
-        
-        dx, dy, dz = self.spacing
-        u = (x - self.origin[0] - dx)/dx
-        v = (y - self.origin[1] - dy)/dy
-        w = (z - self.origin[2] - dz)/dz
-        ix = torch.floor(u).long()
-        iy = torch.floor(v).long()
-        iz = torch.floor(w).long()
-        if not self.support_outside:
-            ix_nan = (ix < 0) | (ix >= self.grid_size[0]-3)
-            iy_nan = (iy < 0) | (iy >= self.grid_size[1]-3)
-            iz_nan = (iz < 0) | (iz >= self.grid_size[2]-3)
-        u = u - ix
-        v = v - iy
-        w = w - iz
-        T = torch.zeros_like(x, dtype=torch.float32)
-        for l in range(4):
-            ix_loc = torch.clamp(ix + l, 0, self.grid_size[0]-1)
-            for m in range(4):
-                iy_loc = torch.clamp(iy + m, 0, self.grid_size[1]-1)
-                for n in range(4):
-                    iz_loc = torch.clamp(iz + n, 0, self.grid_size[2]-1)
-                    T += self.bspline(u, l) * self.bspline(v, m) * self.bspline(w, n) * self.phi_x[i, ix_loc, iy_loc, iz_loc]
-        if not self.support_outside:
-            T[ix_nan | iy_nan | iz_nan] = torch.nan
-        return T
-    
-    def real_displacement(
-            self,
             x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
-            i: int,
-            **kwargs
-    ) -> torch.Tensor:
-        """Return displacements in real coordinates.
-
-        Unlike the displacement method (which assumes volumes go between -1 and 1),
-        this takes into account the real extent of the volume from elastix.
-
-        Args:
-            x (torch.Tensor): x-coordinates. Can be 1d or meshgrid.
-            y (torch.Tensor): y-coordinates. -"-
-            z (torch.Tensor): z-coordinates. -"-
-            i (int): index of the displacement direction. (x=0, y=1, z=2)
-
-        Returns:
-            torch.Tensor: displacement
-        """
-        # handle 1 element spline using clip
-        size = np.clip(self.real_size-1, 1, a_max=None)*self.real_spacing # in physical coords
-        slope = self.spacing / self.real_spacing
-        intercept = - (1+self.spacing) * (1 + 2*self.real_origin / size)
-        return 1/slope[i] * self.displacement(
-            x*slope[0] + intercept[0],
-            y*slope[1] + intercept[1],
-            z*slope[2] + intercept[2],
-            i
-        )
+            u: torch.Tensor,
+            return_full: bool = False
+    ) -> np.ndarray:
+        # use double precision for stability
+        assert x.ndim==1 and y.ndim==1 and z.ndim==1 and u.ndim==1
+        A = self.get_A_matrix(x,y,z).double()
+        u = u.double()
+        if return_full:
+            return torch.linalg.lstsq(A, u, rcond=None)
+        else:
+            return torch.linalg.lstsq(A, u, rcond=None).solution.float()
 
     @staticmethod
     def from_transform_file(
         path: Union[str, Path], units_multiplier: float = 1.0
-    ) -> "BSplineField":
+    ) -> "BSplineField3d":
         """Load B-spline field from transform file.
 
         The transform file is deemed to follow the transformix convention.
@@ -429,16 +258,16 @@ class BSplineField(DisplacementField):
                 Defaults to 1.0.
 
         Returns:
-            BSplineField
+            BSplineField3d
         """
         params = load_bspline_params(path, units_multiplier)
         nx, ny, nz = params['GridSize']
         phi_x = np.array(params['TransformParameters']).reshape(3, nz, ny, nx)
         phi_x = phi_x.swapaxes(1,3)
-        return BSplineField(phi_x, **params)
+        return BSplineField3d(phi_x, **params)
     
     @staticmethod
-    def from_dict(d: Dict) -> "BSplineField":
+    def from_dict(d: Dict) -> "BSplineField3d":
         """Load field from dictionary.
 
         Our convention is to save b-spline dof in order [dim, nx, ny, nz].
@@ -447,12 +276,12 @@ class BSplineField(DisplacementField):
             d (Dict): dictionary with field parameters
 
         Returns:
-            BSplineField
+            BSplineField3d
         """
         phi_x = np.array(d['phi_x']).reshape(3, *d['grid_size'])
         kwargs = {key:val for key,val in d.items() if key not in ['phi_x']}
         kwargs['phi_x'] = phi_x
-        return BSplineField(**kwargs)
+        return BSplineField3d(**kwargs)
     
     def to_dict(self) -> Dict:
         return {
@@ -463,6 +292,10 @@ class BSplineField(DisplacementField):
             "spacing": self.spacing
         }
 
+class BSplineField(BSplineField3d):
+    """Alias for BSplineField3d
+    """
+    pass
 class _BSplineField1d:
     """1D B-spline field used for prototyping
     """
