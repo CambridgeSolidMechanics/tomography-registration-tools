@@ -137,9 +137,9 @@ class BSplineField3d(DisplacementField):
             y = y.ravel()
             z = z.ravel()
 
-        A = self.get_A_matrix(x, y, z).float()
+        A = self.get_A_matrix(x, y, z)
         u = A @ self.phi_x[i].ravel()
-
+        u = u.float()
         if len(shape) > 1:
             return u.reshape(shape)
         else:
@@ -150,9 +150,9 @@ class BSplineField3d(DisplacementField):
 
         Displacements are then given by
         ..math::
-            u(x) = A(x) \phi_x
+            u(x) = A(x) \\phi_x
         where A(x) is the 2d matrix of B-spline weights evaluated 
-        at x and \phi_x is the 1d vector of B-spline degrees of freedom. 
+        at x and \\phi_x is the 1d vector of B-spline degrees of freedom. 
         The matrix can be used to calculate the displacement at x 
         or to infer weights from displacements.
 
@@ -189,10 +189,18 @@ class BSplineField3d(DisplacementField):
         weights_y = torch.stack([self.bspline(v, i) for i in range(4)], dim=1)
         weights_z = torch.stack([self.bspline(w, i) for i in range(4)], dim=1)
         weights = torch.einsum('pi,pj,pk->pijk', weights_x, weights_y, weights_z).reshape(npoints, 64)
-        A = torch.zeros((npoints, nx*ny*nz), device=x.device, dtype=torch.float64)
-        A[torch.arange(npoints)[:,None], flat_index] = weights
-        if not self.support_outside:
-            A[out_of_support] = torch.nan
+        # A = torch.zeros((npoints, nx*ny*nz), device=x.device, dtype=torch.float64)
+        # A[torch.arange(npoints)[:,None], flat_index] = weights
+        del u, v, w, weights_x, weights_y, weights_z, ind_x, ind_y, ind_z, ix, iy, iz
+        idx0 = torch.arange(npoints).reshape(-1, 1).repeat(1, 64).reshape(1, -1)
+        flat_index = flat_index.reshape(1, -1)
+        weights[out_of_support] = torch.nan
+        weights = weights.flatten()
+        assert idx0.shape == flat_index.shape
+        A = torch.sparse_coo_tensor(torch.vstack([idx0, flat_index]), weights, size=(npoints, nx*ny*nz), dtype=torch.float64)
+        # if not self.support_outside:
+        #     A[out_of_support] = torch.nan
+        assert A.dtype == torch.float64
         return A
     
     def real_displacement(
@@ -329,9 +337,9 @@ class _BSplineField1d:
 
         Displacements are given by
         ..math::
-            u(x) = A(x) \phi_x
+            u(x) = A(x) \\phi_x
         where A(x) is the matrix of B-spline weights evaluated 
-        at x and \phi_x is the  vector of B-spline degrees of freedom. 
+        at x and \\phi_x is the  vector of B-spline degrees of freedom. 
         The matrix can be used to calculate the displacement at x 
         or to infer weights from displacements.
 
@@ -394,6 +402,7 @@ class BSplineField2d(_BSplineField1d):
             y = y.flatten()
 
         A = self.get_A_matrix(x, y)
+
         u = A @ self.phi_x[i].flatten()
 
         if len(shape) > 1:
