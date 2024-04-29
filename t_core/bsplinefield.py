@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from functools import lru_cache
-
+import scipy as sp
 from .fields import DisplacementField
 
 def load_bspline_params(path: Union[str, Path], units_multiplier: float=1.0) -> Dict:
@@ -124,9 +124,12 @@ class BSplineField(DisplacementField):
         Returns:
             torch.Tensor: displacement
         """
-        x = torch.Tensor(x)
-        y = torch.Tensor(y)
-        z = torch.Tensor(z)
+        if isinstance(x, np.ndarray):
+            x = torch.tensor(x, dtype=torch.float32)
+        if isinstance(y, np.ndarray):
+            y = torch.tensor(y, dtype=torch.float32)
+        if isinstance(z, np.ndarray):
+            z = torch.tensor(z, dtype=torch.float32)
         
         dx, dy, dz = self.spacing
         u = (x - self.origin[0] - dx)/dx
@@ -153,6 +156,78 @@ class BSplineField(DisplacementField):
         if not self.support_outside:
             T[ix_nan | iy_nan | iz_nan] = torch.nan
         return T
+    
+    def get_A_matrix(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+        """Calculate the A-matrix.
+
+        Displacements are then given by
+        ..math::
+            u(x) = A(x) \\phi_x
+        where A(x) is the 2d matrix of B-spline weights evaluated 
+        at x and \\phi_x is the 1d vector of B-spline degrees of freedom. 
+        The matrix can be used to calculate the displacement at x 
+        or to infer weights from displacements.
+
+        Args:
+            x (torch.Tensor): x-position. Must be 1d. Shape [npoints]
+            y (torch.Tensor): y-position. -"-
+            z (torch.Tensor): z-position. -"-
+
+        Returns:
+            torch.Tensor: Matrix of shape [npoints, nx*ny*nz]
+        """
+        assert x.ndim == 1 and y.ndim == 1 and z.ndim == 1
+        assert x.shape[0] == y.shape[0] == z.shape[0]
+        dx, dy, dz = self.spacing
+        nx, ny, nz = self.grid_size
+        npoints = x.shape[0]
+        u = (x - self.origin[0] - dx)/dx
+        v = (y - self.origin[1] - dy)/dy
+        w = (z - self.origin[2] - dz)/dz
+        ix = torch.floor(u).long()
+        iy = torch.floor(v).long()
+        iz = torch.floor(w).long()
+        u = (u - ix).to(torch.float64)
+        v = (v - iy).to(torch.float64)
+        w = (w - iz).to(torch.float64)
+        ind_x = (ix[:, None] + torch.arange(4, device=ix.device)).repeat_interleave(16, dim=1)
+        ind_y = (iy[:, None] + torch.arange(4, device=iy.device)).repeat(1, 4).repeat_interleave(4, dim=1)
+        ind_z = (iz[:, None] + torch.arange(4, device=iz.device)).repeat(1, 16)
+        out_of_support = (ind_x < 0) | (ind_x >= nx) | (ind_y < 0) | (ind_y >= ny) | (ind_z < 0) | (ind_z >= nz)
+        out_of_support = out_of_support.any(dim=1)
+        flat_index = np.ravel_multi_index((ind_x, ind_y, ind_z), (nx, ny, nz), mode='clip')
+        flat_index = torch.tensor(flat_index, device=x.device, dtype=torch.long)
+        weights_x = torch.stack([self.bspline(u, i) for i in range(4)], dim=1)
+        weights_y = torch.stack([self.bspline(v, i) for i in range(4)], dim=1)
+        weights_z = torch.stack([self.bspline(w, i) for i in range(4)], dim=1)
+        weights = torch.einsum('pi,pj,pk->pijk', weights_x, weights_y, weights_z).reshape(npoints, 64)
+        del u, v, w, weights_x, weights_y, weights_z, ind_x, ind_y, ind_z, ix, iy, iz
+        idx0 = torch.arange(npoints).reshape(-1, 1).repeat(1, 64).reshape(1, -1)
+        flat_index = flat_index.reshape(1, -1)
+        weights[out_of_support] = torch.nan
+        weights = weights.flatten()
+        assert idx0.shape == flat_index.shape
+        # A = torch.sparse_coo_tensor(torch.vstack([idx0, flat_index]), weights, size=(npoints, nx*ny*nz), dtype=torch.float64)
+        A = sp.sparse.coo_matrix((weights.numpy().flatten(), (idx0.numpy().flatten(), flat_index.numpy().flatten())), shape=(npoints, nx*ny*nz))
+        return A
+    
+    def compute_weights_from_displacement(
+            self, 
+            x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
+            u: torch.Tensor
+    ) -> np.ndarray:
+        # use double precision for stability
+        assert x.ndim==1 and y.ndim==1 and z.ndim==1 and u.ndim==1
+        # A = self.get_A_matrix(x,y,z).double()
+        # u = u.double()
+        # weights = torch.linalg.lstsq(A, u, rcond=None).solution.float()
+
+        A = self.get_A_matrix(x,y,z)
+        weights = sp.sparse.linalg.lsqr(A, u.numpy().flatten())[0]
+        weights = torch.Tensor(weights)
+        # reshape to 3d. However, this  still only gives 
+        # the weights for one component of the displacement
+        return weights.reshape(1, *self.grid_size)
     
     def real_displacement(
             self,
