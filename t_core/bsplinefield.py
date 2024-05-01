@@ -97,7 +97,7 @@ class BSplineField(DisplacementField):
             self.real_origin = np.array(kwargs['GridOrigin'])
             # downscale displacements accordingly
             scale_factor = self.spacing / self.real_spacing
-            self.phi_x *= scale_factor.reshape(3,1,1,1)
+            self.phi_x *= scale_factor.reshape(3,1,1,1) # This needs to be figured out
 
     def __repr__(self) -> str:
         f = self
@@ -214,7 +214,8 @@ class BSplineField(DisplacementField):
     def compute_weights_from_displacement(
             self, 
             x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
-            u: torch.Tensor
+            u: torch.Tensor,
+            phi_guess: np.array = None
     ) -> np.ndarray:
         # use double precision for stability
         assert x.ndim==1 and y.ndim==1 and z.ndim==1 and u.ndim==1
@@ -223,8 +224,13 @@ class BSplineField(DisplacementField):
         # weights = torch.linalg.lstsq(A, u, rcond=None).solution.float()
 
         A = self.get_A_matrix(x,y,z)
-        weights = sp.sparse.linalg.lsqr(A, u.numpy().flatten())[0]
-        weights = torch.Tensor(weights)
+        if not phi_guess:
+            phi_guess = self.phi_x
+        if isinstance(phi_guess, torch.Tensor):
+            phi_guess = phi_guess.numpy()
+        # sol = sp.sparse.linalg.lsqr(A, u.numpy().flatten(), x0=phi_guess.flatten())
+        sol = sp.sparse.linalg.lsmr(A, u.numpy().flatten(), x0=phi_guess.flatten(), show=False, atol=1e-3)
+        weights = torch.Tensor(sol[0])
         # reshape to 3d. However, this  still only gives 
         # the weights for one component of the displacement
         return weights.reshape(1, *self.grid_size)
