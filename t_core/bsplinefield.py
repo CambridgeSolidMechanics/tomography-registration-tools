@@ -204,7 +204,7 @@ class BSplineField(DisplacementField):
         del u, v, w, weights_x, weights_y, weights_z, ind_x, ind_y, ind_z, ix, iy, iz
         idx0 = torch.arange(npoints).reshape(-1, 1).repeat(1, 64).reshape(1, -1)
         flat_index = flat_index.reshape(1, -1)
-        weights[out_of_support] = torch.nan
+        if not self.support_outside: weights[out_of_support] = torch.nan
         weights = weights.flatten()
         assert idx0.shape == flat_index.shape
         # A = torch.sparse_coo_tensor(torch.vstack([idx0, flat_index]), weights, size=(npoints, nx*ny*nz), dtype=torch.float64)
