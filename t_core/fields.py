@@ -180,7 +180,42 @@ class UniformDisplacementField(DisplacementField):
     @staticmethod
     def from_dict(data: Dict) -> 'UniformDisplacementField':
         return UniformDisplacementField(**data)
+
+class ArbitrarySeperableDisplacementField(DisplacementField):
+    """Create a displacement field which can be expressed in variable seperable form.
+    This function is expressed as a Dict where the key is the axis index and value is the function along that axis.
+    For example:
+    A uniaxial uniform strain dispalcement field can be initialized with
+    arbit_fld = ArbitrarySeperableDisplacementField({2: lambda x: 0.1*x})
+    Functions on the unspecified are assumed to be 0.
+    Args:
+        dispFuncs_xyz (Dict): 
+    """
+    def __init__(self, dispFuncs_xyz: Dict, **kwargs) -> None:
+        super().__init__()
+        self.dispFuncs_xys = dispFuncs_xyz
+
+    def displacement(
+            self, 
+            x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
+            i: int,
+    ) -> torch.Tensor:
+        xyz = [x, y, z]
+        if i in self.dispFuncs_xys.keys():
+            return self.dispFuncs_xys[i](xyz[i])
+        else:
+            return 0*(xyz[i])
+        
+    def to_dict(self) -> Dict:
+        return {
+            'class': 'ArbitrarySeperableDisplacementField',
+            'dispFuncs_xys': self.dispFuncs_xys
+        }
     
+    @staticmethod
+    def from_dict(data: Dict) -> 'ArbitrarySeperableDisplacementField':
+        return ArbitrarySeperableDisplacementField(**data)
+
 class UniformStrainDisplacementField(DisplacementField):
     def __init__(self, eps_xyz: Iterable[float], **kwargs) -> None:
         """Create a uniform strain displacement field.
