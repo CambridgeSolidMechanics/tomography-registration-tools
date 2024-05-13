@@ -199,7 +199,8 @@ class ArbitrarySeperableDisplacementField(DisplacementField):
             self.dispFuncs_xys = {}
             for i in kwargs['dispFuncs_val'].keys():
                 self.dispFuncs_xys[i] = interp1d(x=kwargs['dispFuncs_val'][i][0],
-                                                 y=kwargs['dispFuncs_val'][i][1])
+                                                 y=kwargs['dispFuncs_val'][i][1],
+                                                 fill_value='extrapolate')
         else:
             self.dispFuncs_xys = dispFuncs_xyz
         
