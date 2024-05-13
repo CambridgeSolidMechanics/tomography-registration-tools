@@ -213,9 +213,9 @@ class ArbitrarySeperableDisplacementField(DisplacementField):
     ) -> torch.Tensor:
         xyz = [x, y, z]
         if i in self.dispFuncs_xys.keys():
-            return self.dispFuncs_xys[i](xyz[i])
+            return torch.Tensor(self.dispFuncs_xys[i](xyz[i]))
         else:
-            return 0*(xyz[i])
+            return torch.Tensor(0*(xyz[i]))
         
     def to_dict(self) -> Dict:
         # To write t
