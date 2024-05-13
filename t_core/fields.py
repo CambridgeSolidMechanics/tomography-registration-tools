@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import yaml
 from functools import lru_cache
+from scipy.interpolate import interp1d
 
 class Field:
     """General class for deformation field.
@@ -187,13 +188,23 @@ class ArbitrarySeperableDisplacementField(DisplacementField):
     For example:
     A uniaxial uniform strain dispalcement field can be initialized with
     arbit_fld = ArbitrarySeperableDisplacementField({2: lambda x: 0.1*x})
-    Functions on the unspecified are assumed to be 0.
+    Functions on the unspecified axes are assumed to be 0.
     Args:
         dispFuncs_xyz (Dict): 
     """
-    def __init__(self, dispFuncs_xyz: Dict, **kwargs) -> None:
+    def __init__(self, dispFuncs_xyz: Dict = None, **kwargs) -> None:
         super().__init__()
-        self.dispFuncs_xys = dispFuncs_xyz
+        if 'class' in kwargs:
+            assert kwargs['class'] == 'ArbitrarySeperableDisplacementField'
+            self.dispFuncs_xys = {}
+            for i in kwargs['dispFuncs_val'].keys():
+                self.dispFuncs_xys[i] = interp1d(x=kwargs['dispFuncs_val'][i][0],
+                                                 y=kwargs['dispFuncs_val'][i][1])
+        else:
+            self.dispFuncs_xys = dispFuncs_xyz
+        
+        if not self.dispFuncs_xys:
+            raise ValueError(f"Functions not input correctly")
 
     def displacement(
             self, 
@@ -207,9 +218,10 @@ class ArbitrarySeperableDisplacementField(DisplacementField):
             return 0*(xyz[i])
         
     def to_dict(self) -> Dict:
+        # To write t
         return {
             'class': 'ArbitrarySeperableDisplacementField',
-            'dispFuncs_xys': self.dispFuncs_xys
+            'dispFuncs_val': {ax: (f.x, f.y) for ax, f in self.dispFuncs_xys.items()},
         }
     
     @staticmethod
