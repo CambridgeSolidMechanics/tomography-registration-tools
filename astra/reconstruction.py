@@ -1,24 +1,31 @@
 # %%
 import astra
 import numpy as np
-import pylab
+import matplotlib.pyplot as plt
 from pathlib import Path
 import cv2 as cv
-from utils import load_xtekct, load_angles, load_images
+from utils import load_xtekct, load_angles, load_images, PrintTableMetrics
+import tyro
 
-def main():
+def main(
+        input_folder: Path,
+        output_folder: Path,
+        Lscale: int = 20,
+        image_scale_factor: float = 1.0,
+):
+    output_folder.mkdir(parents=True, exist_ok=True)
     Lscale = 15
     image_scale_factor = 4
-    proj_data, image_indices = load_images('./data', image_scale_factor)
+    proj_data, image_indices = load_images(input_folder, image_scale_factor)
     print(proj_data.shape)
     
-    data = load_xtekct('./data')
+    data = load_xtekct(input_folder)
     print(data.keys())
     xtekct = data['XTekCT']
     print(xtekct.keys())
-    angle_map = load_angles('./data')
+    angle_map = load_angles(input_folder)
     
-    vol_geom = astra.create_vol_geom(500, 500, 500)
+    vol_geom = astra.create_vol_geom(500, 500, 2000)
 
     angle_arr = np.array([angle_map[i] for i in image_indices]) * np.pi/180
 
@@ -34,17 +41,16 @@ def main():
     }
 
     # Create empty volume
-    cube = np.zeros((500,500,500))
+    cube = np.zeros((vol_geom['GridSliceCount'], vol_geom['GridRowCount'], vol_geom['GridColCount'])) # todo check row col order
   
     # Create projection data from this
     proj_id = astra.create_sino3d_gpu(cube, proj_geom, vol_geom, returnData=False)
     astra.data3d.store(proj_id, proj_data)
 
     # Display a single projection image
-    pylab.gray()
-    pylab.figure(1)
-    pylab.imshow(proj_data[:,0,:])
-    pylab.show()
+    plt.figure(1)
+    plt.imshow(proj_data[:,0,:], cmap='gray')
+    plt.show()
 
     # Create a data object for the reconstruction
     rec_id = astra.data3d.create('-vol', vol_geom)
@@ -53,33 +59,35 @@ def main():
     cfg = astra.astra_dict('SIRT3D_CUDA')
     cfg['ReconstructionDataId'] = rec_id
     cfg['ProjectionDataId'] = proj_id
+    cfg['option'] = {'GPUindex': 1}
 
     # Create the algorithm object from the configuration structure
     alg_id = astra.algorithm.create(cfg)
 
-    # Run 150 iterations of the algorithm
-    nIters = 10
+    # Run the algorithm
+    nIters = 7
     neach = 50
+    print(f'Running {nIters*neach} iterations')
+    t = PrintTableMetrics(['Iteration', 'Error'])
     residual_error = np.zeros(nIters)
     for i in range(nIters):
         # Run a single iteration
         astra.algorithm.run(alg_id, neach)
         residual_error[i] = astra.algorithm.get_res_norm(alg_id)
-        print(f'Iteration {i*neach}/{nIters*neach}, residual error: {residual_error[i]:.2f}')
-
+        t.update({'Iteration': i*neach, 'Error': residual_error[i]})
 
     # Get the result and save
     rec = astra.data3d.get(rec_id)
-    np.save(f'reconstruction_{residual_error[-1]:.1f}.npy', rec)
+    np.save(output_folder/f'reconstruction_{residual_error[-1]:.1f}.npy', rec)
 
-    pylab.figure(2)
-    pylab.imshow(rec[:,:,256])
+    plt.figure(2)
+    plt.imshow(rec[:,:,256])
 
-    pylab.figure(4)
-    pylab.plot(residual_error)
-    pylab.show()
+    plt.figure(4)
+    plt.plot(residual_error)
+    plt.show()
 
-    out_dir = Path(f'./slices_{proj_data.shape[1]}')
+    out_dir = output_folder/Path(f'./slices_{proj_data.shape[1]}')
     out_dir.mkdir(exist_ok=True, parents=True)
     for i in range(0,rec.shape[2],rec.shape[2]//64):
         cv.imwrite(str(out_dir/f'slice_{i:03d}.png'), ((rec[:,:,i]-rec.min()) / (rec.max()-rec.min())*255).astype(np.uint8))
@@ -92,4 +100,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    tyro.cli(main)

@@ -4,9 +4,46 @@ import cv2 as cv
 import numpy as np
 from rich.progress import track
 
+class PrintTableMetrics:
+    def __init__(self, log_metrics: list, col_width: int = 10) -> None:
+        super().__init__()
+
+        header = []
+        for metric in log_metrics:
+            header.append(metric)
+        if 'Iteration' not in header:
+            header.insert(0, "Iteration")
+        
+        self.format_str = '{' + ':<' + str(col_width) + '}'
+        self.col_width = col_width
+        n_cols = len(header)
+        total_width = col_width * n_cols + 3*n_cols
+        self.total_width = total_width
+        self.header = header
+        self._time_metrics = {}
+        fields = [self.format_str.format(metric) for metric in self.header]
+        line = " | ".join(fields) + "\n" + "-" * self.total_width
+        print(line)
+    
+    def update(self, metrics: dict) -> str:
+        # Formatting
+        s = self.format_str
+        fields = []
+        for key in self.header:
+            if key in metrics:
+                if isinstance(metrics[key], float):
+                    val = f'{metrics[key]:.6f}'
+                else:
+                    val = metrics[key]
+                fields.append(s.format(val))
+            else:
+                fields.append(s.format(''))
+        line =  " | ".join(fields)
+        print(line)
+
 def load_images(folder: Path, image_scale_factor=4):
     ims = []
-    file_list = folder.glob('*.tif')
+    file_list = list(folder.glob('*.tif'))
     image_indices = []
     for f in track(file_list, description='Reading images'):
         image_indices.append(int(f.stem.split('_')[-1]))
