@@ -18,6 +18,7 @@ class PrintTableMetrics:
         if 'Time' not in header:
             header.insert(0, "Time")
         if max_iter is not None:
+            header.append('it/s')
             header.append('ETA')
         
         self.format_str = '{' + ':>' + str(col_width) + '}'
@@ -41,9 +42,12 @@ class PrintTableMetrics:
             assert self._time_metrics['max_iter'] is not None
             iter_to_go = self._time_metrics['max_iter'] - metrics['Iteration']
             time_per_iter = (datetime.now() - self._time_metrics['start']) / metrics['Iteration'] 
+            iter_per_s = 1 / time_per_iter.total_seconds()
             time_left = time_per_iter * iter_to_go
             seconds_left = time_left.total_seconds()
             metrics['ETA'] = f'{seconds_left//3600:.0f}H{(seconds_left%3600)//60:.0f}m{seconds_left%60:.0f}s'
+            metrics['it/s'] = iter_per_s
+
         fields = []
         for key in self.header:
             if key in metrics:
