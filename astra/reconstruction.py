@@ -1,17 +1,24 @@
-# %%
+from typing import Tuple, Literal, Optional
+from pathlib import Path
+
 import astra
 import numpy as np
 import matplotlib.pyplot as plt
-from pathlib import Path
 import cv2 as cv
-from utils import load_xtekct, load_angles, load_images, PrintTableMetrics
 import tyro
+
+from utils import load_xtekct, load_angles, load_images, PrintTableMetrics
 
 def main(
         input_folder: Path,
         output_folder: Path,
         Lscale: int = 20,
         image_downscale: float = 1.0,
+        target_resolution: Tuple[int,int,int] = (500,500,500),
+        steps_per_epoch: int = 10,
+        max_epochs: int = 10,
+        algorithm: Optional[Literal['SIRT3D_CUDA','CGLS3D_CUDA']] = 'SIRT3D_CUDA',
+        gpu_index: int = 0,
 ):
     output_folder.mkdir(parents=True, exist_ok=True)
     proj_data, image_indices = load_images(input_folder, image_downscale)
@@ -21,7 +28,7 @@ def main(
     xtekct = data['XTekCT']
     angle_map = load_angles(input_folder)
     
-    vol_geom = astra.create_vol_geom(500, 500, 2000)
+    vol_geom = astra.create_vol_geom(*target_resolution)
 
     angle_arr = np.array([angle_map[i] for i in image_indices]) * np.pi/180
 
@@ -53,32 +60,30 @@ def main(
     rec_id = astra.data3d.create('-vol', vol_geom)
 
     # Set up the parameters for a reconstruction algorithm using the GPU
-    cfg = astra.astra_dict('SIRT3D_CUDA')
+    cfg = astra.astra_dict(algorithm)
     cfg['ReconstructionDataId'] = rec_id
     cfg['ProjectionDataId'] = proj_id
-    cfg['option'] = {'GPUindex': 1}
+    cfg['option'] = {'GPUindex': gpu_index}
 
     # Create the algorithm object from the configuration structure
     alg_id = astra.algorithm.create(cfg)
 
     # Run the algorithm
-    nIters = 10
-    neach = 10
-    print(f'Running {nIters*neach} iterations')
-    t = PrintTableMetrics(['Iteration', 'Error'])
-    residual_error = np.zeros(nIters)
-    for i in range(nIters):
+    print(f'Running {max_epochs*steps_per_epoch} iterations')
+    t = PrintTableMetrics(['Iteration', 'Error'], max_iter=max_epochs*steps_per_epoch)
+    residual_error = np.zeros(max_epochs)
+    for i in range(max_epochs):
         # Run a single iteration
-        astra.algorithm.run(alg_id, neach)
+        astra.algorithm.run(alg_id, steps_per_epoch)
         residual_error[i] = astra.algorithm.get_res_norm(alg_id)
-        t.update({'Iteration': i*neach, 'Error': residual_error[i]})
+        t.update({'Iteration': i*steps_per_epoch, 'Error': residual_error[i]})
 
     # Get the result and save
     rec = astra.data3d.get(rec_id)
     np.save(output_folder/f'reconstruction_{residual_error[-1]:.1f}.npy', rec)
 
     plt.figure(2)
-    plt.imshow(rec[:,:,250])
+    plt.imshow(rec[:,:,vol_geom['GridColCount']//2])
     plt.savefig(output_folder/'slice.png')
     plt.close()
 
@@ -89,7 +94,7 @@ def main(
     plt.close()
 
 
-    out_dir = output_folder/Path(f'./slices_{proj_data.shape[1]}')
+    out_dir = output_folder/Path('./slices')
     out_dir.mkdir(exist_ok=True, parents=True)
     for i in range(0,rec.shape[2],rec.shape[2]//64):
         cv.imwrite(str(out_dir/f'slice_{i:03d}.png'), ((rec[:,:,i]-rec.min()) / (rec.max()-rec.min())*255).astype(np.uint8))
