@@ -18,9 +18,7 @@ def main(
     print(proj_data.shape)
     
     data = load_xtekct(input_folder)
-    print(data.keys())
     xtekct = data['XTekCT']
-    print(xtekct.keys())
     angle_map = load_angles(input_folder)
     
     vol_geom = astra.create_vol_geom(500, 500, 2000)
