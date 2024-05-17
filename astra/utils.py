@@ -3,9 +3,10 @@ import pandas as pd
 import cv2 as cv
 import numpy as np
 from rich.progress import track
+from datetime import datetime
 
 class PrintTableMetrics:
-    def __init__(self, log_metrics: list, col_width: int = 10) -> None:
+    def __init__(self, log_metrics: list, col_width: int = 12) -> None:
         super().__init__()
 
         header = []
@@ -13,6 +14,8 @@ class PrintTableMetrics:
             header.append(metric)
         if 'Iteration' not in header:
             header.insert(0, "Iteration")
+        if 'Time' not in header:
+            header.insert(0, "Time")
         
         self.format_str = '{' + ':<' + str(col_width) + '}'
         self.col_width = col_width
@@ -28,6 +31,8 @@ class PrintTableMetrics:
     def update(self, metrics: dict) -> str:
         # Formatting
         s = self.format_str
+        if 'Time' not in metrics:
+            metrics['Time'] = datetime.now().strftime('%b-%d %H:%M')
         fields = []
         for key in self.header:
             if key in metrics:
