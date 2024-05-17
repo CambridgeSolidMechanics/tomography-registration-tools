@@ -40,8 +40,9 @@ class PrintTableMetrics:
         if 'ETA' in self.header:
             assert 'Iteration' in metrics
             assert self._time_metrics['max_iter'] is not None
-            iter_to_go = self._time_metrics['max_iter'] - metrics['Iteration']
-            time_per_iter = (datetime.now() - self._time_metrics['start']) / metrics['Iteration'] 
+            cur_iter = max(1, metrics['Iteration'])
+            iter_to_go = self._time_metrics['max_iter'] - cur_iter
+            time_per_iter = (datetime.now() - self._time_metrics['start']) / cur_iter
             iter_per_s = 1 / time_per_iter.total_seconds()
             time_left = time_per_iter * iter_to_go
             seconds_left = time_left.total_seconds()
