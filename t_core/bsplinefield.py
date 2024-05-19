@@ -2,6 +2,7 @@ from typing import Callable, Union, Iterable, Tuple, Optional, Dict
 from pathlib import Path
 import numpy as np
 import torch
+from torch import Tensor
 from functools import lru_cache
 import scipy as sp
 from .fields import DisplacementField
@@ -317,8 +318,8 @@ class BSplineField(DisplacementField):
             "spacing": self.spacing
         }
 
-class _BSplineField1d:
-    """1D B-spline field used for prototyping
+class _BSplineField1d(torch.nn.Module):
+    """1D B-spline field used for prototyping. Differentiable field now
     """
     @staticmethod
     def bspline(u, i):
@@ -331,35 +332,41 @@ class _BSplineField1d:
         elif i == 3:
             return u**3 / 6
         
-    def __init__(self, phi_x: np.ndarray, support_outside: bool = False) -> None:
-        if not isinstance(phi_x, np.ndarray):
-            phi_x = np.array(phi_x)
-        assert phi_x.ndim == 1
-        assert phi_x.shape[0] > 3
+    def __init__(self, phi_x: Optional[Union[Tensor, torch.nn.parameter.Parameter]] = None, support_outside: bool = False, num_control_points: Optional[int] = None) -> None:
+        super().__init__()
+        assert phi_x is not None or num_control_points is not None
+        if phi_x is not None:
+            assert phi_x.ndim == 1
+            assert phi_x.shape[0] > 3
+            num_control_points = phi_x.shape[0]
         self.phi_x = phi_x
         # provide support over -1 to 1
-        self.dx = 2/(len(phi_x)-3)
+        self.dx = 2/(num_control_points-3)
         self.origin = -1 - self.dx
         self.support_outside = support_outside
 
-    def displacement(self, _t: np.ndarray) -> np.ndarray:
+    def displacement(self, _t: Tensor, phi_x: Optional[Union[Tensor, torch.nn.parameter.Parameter]] = None) -> Tensor:
         # # support on -1 to 1
         # _t = 0.5 * (1+_t)*(self.phi_x.shape[0]-3) * self.dx
+        # xor for phi_x
+        assert (phi_x is None) != (self.phi_x is None)
+        if phi_x is None:
+            phi_x = self.phi_x
         assert _t.ndim == 1
         t = _t - self.origin - self.dx
-        x = np.zeros_like(t)
-        indices = np.floor(t/self.dx).astype(int)        
+        x = _t.new_zeros(t.shape)
+        indices = torch.floor(t/self.dx).long() 
         if not self.support_outside:
-            invalid = (indices < 0) | (indices >= len(self.phi_x)-3)
+            invalid = (indices < 0) | (indices >= len(phi_x)-3)
             valid = ~invalid
-            x[invalid] = np.nan
+            x[invalid] = torch.nan
         else:
-            valid = np.ones_like(indices, dtype=bool)
+            valid = _t.new_ones(t.shape, dtype=torch.bool)
 
         for i in range(4):
             inds_loc = indices[valid] + i
             if self.support_outside:
-                inds_loc = np.clip(inds_loc, 0, len(self.phi_x)-1) # support outside the domain
-            x[valid] += self.bspline(t[valid]/self.dx - indices[valid], i) * self.phi_x[inds_loc]
+                inds_loc = torch.clamp(inds_loc, 0, len(phi_x)-1) # support outside the domain
+            x[valid] += self.bspline(t[valid]/self.dx - indices[valid], i) * phi_x[inds_loc]
 
         return x

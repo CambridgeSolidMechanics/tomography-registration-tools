@@ -11,12 +11,10 @@ def main(
         input_folder: Path,
         output_folder: Path,
         Lscale: int = 20,
-        image_scale_factor: float = 1.0,
+        image_downscale: float = 1.0,
 ):
     output_folder.mkdir(parents=True, exist_ok=True)
-    Lscale = 15
-    image_scale_factor = 4
-    proj_data, image_indices = load_images(input_folder, image_scale_factor)
+    proj_data, image_indices = load_images(input_folder, image_downscale)
     print(proj_data.shape)
     
     data = load_xtekct(input_folder)
@@ -31,10 +29,10 @@ def main(
 
     proj_geom = {
         'type':'cone',
-        'DetectorSpacingX':xtekct['DetectorPixelSizeX']*image_scale_factor*Lscale, # L
-        'DetectorSpacingY':xtekct['DetectorPixelSizeY']*image_scale_factor*Lscale, # L
-        'DetectorRowCount':int(xtekct['DetectorPixelsX']/image_scale_factor), # -
-        'DetectorColCount':int(xtekct['DetectorPixelsY']/image_scale_factor), # -
+        'DetectorSpacingX':xtekct['DetectorPixelSizeX']*image_downscale*Lscale, # L
+        'DetectorSpacingY':xtekct['DetectorPixelSizeY']*image_downscale*Lscale, # L
+        'DetectorRowCount':int(xtekct['DetectorPixelsX']/image_downscale), # -
+        'DetectorColCount':int(xtekct['DetectorPixelsY']/image_downscale), # -
         'ProjectionAngles':angle_arr, # - 
         'DistanceOriginSource':xtekct['SrcToObject']*Lscale, # L
         'DistanceOriginDetector':(xtekct['SrcToDetector']-xtekct['SrcToObject'])*Lscale # L
@@ -50,7 +48,8 @@ def main(
     # Display a single projection image
     plt.figure(1)
     plt.imshow(proj_data[:,0,:], cmap='gray')
-    plt.show()
+    plt.savefig(output_folder/'projection.png')
+    plt.close()
 
     # Create a data object for the reconstruction
     rec_id = astra.data3d.create('-vol', vol_geom)
@@ -82,10 +81,13 @@ def main(
 
     plt.figure(2)
     plt.imshow(rec[:,:,256])
+    plt.savefig(output_folder/f'reconstruction_{residual_error[-1]:.1f}.png')
+    plt.close()
 
     plt.figure(4)
     plt.plot(residual_error)
-    plt.show()
+    plt.savefig(output_folder/f'residual_error.png')
+    plt.close()
 
     out_dir = output_folder/Path(f'./slices_{proj_data.shape[1]}')
     out_dir.mkdir(exist_ok=True, parents=True)
