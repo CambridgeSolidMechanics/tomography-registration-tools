@@ -148,11 +148,15 @@ class BSplineField(DisplacementField):
         T = torch.zeros_like(x, dtype=torch.float32)
         for l in range(4):
             ix_loc = torch.clamp(ix + l, 0, self.grid_size[0]-1)
+            sx = self.bspline(u, l)
             for m in range(4):
                 iy_loc = torch.clamp(iy + m, 0, self.grid_size[1]-1)
+                sy = self.bspline(v, m)
+                sx_sy = sx * sy
                 for n in range(4):
                     iz_loc = torch.clamp(iz + n, 0, self.grid_size[2]-1)
-                    T += self.bspline(u, l) * self.bspline(v, m) * self.bspline(w, n) * self.phi_x[i, ix_loc, iy_loc, iz_loc]
+                    sz = self.bspline(w, n)
+                    T += sx_sy * sz * self.phi_x[i, ix_loc, iy_loc, iz_loc]
         if not self.support_outside:
             T[ix_nan | iy_nan | iz_nan] = torch.nan
         return T
