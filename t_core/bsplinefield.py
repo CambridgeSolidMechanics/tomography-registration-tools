@@ -5,6 +5,7 @@ import torch
 from functools import lru_cache
 import scipy as sp
 from .fields import DisplacementField
+from re import sub
 
 def load_bspline_params(path: Union[str, Path], units_multiplier: float=1.0) -> Dict:
     out = {}
@@ -62,6 +63,7 @@ class BSplineField(DisplacementField):
             self, 
             phi_x: Union[torch.Tensor, np.ndarray], 
             support_outside: bool = False,
+            use_linear_operator_for_displacement = False,
             **kwargs
     ) -> None:
         """Set up the B-spline field.
@@ -71,6 +73,8 @@ class BSplineField(DisplacementField):
                 of the B-spline field in order [dim, nx, ny, nz]
             support_outside (bool, optional): whether to provide support
                 for locations outside the control points. Defaults to False.
+            use_linear_operator_for_displacement (bool, optional): whether to use a linear operator
+                instead of A matrix for calculate displacements. Defaults to False.
         """
         super().__init__()
         if 'class' in kwargs:
@@ -96,8 +100,8 @@ class BSplineField(DisplacementField):
             assert np.allclose(self.real_size, self.grid_size)
             self.real_origin = np.array(kwargs['GridOrigin'])
             # downscale displacements accordingly
-            scale_factor = self.spacing / self.real_spacing
-            self.phi_x *= scale_factor.reshape(3,1,1,1) # This needs to be figured out
+            self.scale_factor = self.spacing / self.real_spacing
+            self.phi_x *= self.scale_factor.reshape(3,1,1,1) # This needs to be figured out
 
     def __repr__(self) -> str:
         f = self
@@ -124,6 +128,26 @@ class BSplineField(DisplacementField):
         Returns:
             torch.Tensor: displacement
         """
+        loc_consts = self.compute_A_matrix_linear_operator_constants(x, y, z)
+        T = self.A_matrix_linear_operator(self.phi_x[i, :, :, :], location_consts=loc_consts)
+        return T
+        
+    @lru_cache
+    def compute_A_matrix_linear_operator_constants(
+            self, 
+            x: Union[torch.Tensor, np.ndarray],
+            y: Union[torch.Tensor, np.ndarray],
+            z: Union[torch.Tensor, np.ndarray]
+    ):
+        """
+        Args:
+            x (Union[torch.Tensor, np.ndarray]): x-coordinates. Can be 1d or meshgrid.
+            y (Union[torch.Tensor, np.ndarray]): y-coordinates. -"-
+            z (Union[torch.Tensor, np.ndarray]): z-coordinates. -"-
+
+        Returns:
+            
+        """
         if isinstance(x, np.ndarray):
             x = torch.tensor(x, dtype=torch.float32)
         if isinstance(y, np.ndarray):
@@ -142,10 +166,19 @@ class BSplineField(DisplacementField):
             ix_nan = (ix < 0) | (ix >= self.grid_size[0]-3)
             iy_nan = (iy < 0) | (iy >= self.grid_size[1]-3)
             iz_nan = (iz < 0) | (iz >= self.grid_size[2]-3)
+        else:
+            ix_nan = None
+            iy_nan = None
+            iz_nan = None
+
         u = u - ix
         v = v - iy
         w = w - iz
-        T = torch.zeros_like(x, dtype=torch.float32)
+        return (u, v, w, ix, iy, iz, ix_nan, iy_nan, iz_nan)
+
+    def A_matrix_linear_operator(self, phi_x_i, location_consts):
+        u, v, w, ix, iy, iz, ix_nan, iy_nan, iz_nan = location_consts
+        T = torch.zeros_like(u, dtype=torch.float32)
         for l in range(4):
             ix_loc = torch.clamp(ix + l, 0, self.grid_size[0]-1)
             sx = self.bspline(u, l)
@@ -156,11 +189,11 @@ class BSplineField(DisplacementField):
                 for n in range(4):
                     iz_loc = torch.clamp(iz + n, 0, self.grid_size[2]-1)
                     sz = self.bspline(w, n)
-                    T += sx_sy * sz * self.phi_x[i, ix_loc, iy_loc, iz_loc]
+                    T += sx_sy * sz * phi_x_i[ix_loc, iy_loc, iz_loc]
         if not self.support_outside:
             T[ix_nan | iy_nan | iz_nan] = torch.nan
         return T
-    
+
     def get_A_matrix(self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         """Calculate the A-matrix.
 
@@ -228,8 +261,9 @@ class BSplineField(DisplacementField):
         # weights = torch.linalg.lstsq(A, u, rcond=None).solution.float()
 
         A = self.get_A_matrix(x,y,z)
-        if not phi_guess:
-            phi_guess = self.phi_x
+        
+        if phi_guess is None:
+            phi_guess = 0*self.phi_x[0, ...]
         if isinstance(phi_guess, torch.Tensor):
             phi_guess = phi_guess.numpy()
         # sol = sp.sparse.linalg.lsqr(A, u.numpy().flatten(), x0=phi_guess.flatten())
@@ -238,6 +272,52 @@ class BSplineField(DisplacementField):
         # reshape to 3d. However, this  still only gives 
         # the weights for one component of the displacement
         return weights.reshape(1, *self.grid_size)
+    
+    def compute_weights_from_real_displacement(
+            self, 
+            x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
+            u: torch.Tensor,
+            uidx: int,
+            phi_guess: np.array = None
+    ) -> np.ndarray:
+        
+        x = x.flatten()
+        y = y.flatten()
+        z = z.flatten()
+        u = u.flatten()
+        
+        def voxToVolNorm(voxel, i):
+            return ((voxel)/(resolution[i]-1))*2-1
+        def locToVox(loc):
+            # Location in um and dx in um
+            return (loc/dx-1/2).floor().int()
+        def locToVolNorm(loc, i):
+            return voxToVolNorm(locToVox(loc), i)
+        def voxToLoc(vox):
+            return (vox+1/2)*dx
+        def volNormToVox(volNorm, i):
+            return (volNorm+1)*(resolution[i]-1)/2
+        def volNormToLoc(volNorm, i):
+            return voxToLoc(volNormToVox(volNorm, i))
+        
+        oldSupportOutside = self.support_outside
+        self.support_outside = True
+
+        resolution = self.paramsFromFile['Size']
+        dx = self.paramsFromFile['Spacing'][0]
+        # idx = torch.randperm(x.numel())
+        # x = x[idx]
+        # y = y[idx]
+        # z = z[idx]
+        # u = u[idx]
+        weights = self.compute_weights_from_displacement(x=locToVolNorm(x, 0),
+                                                         y=locToVolNorm(y, 1),
+                                                         z=locToVolNorm(z, 2),
+                                                         u=2*u/((resolution[uidx]-1)*dx),
+                                                         phi_guess=phi_guess
+                                                         )
+        self.support_outside = oldSupportOutside
+        return weights
     
     def real_displacement(
             self,
@@ -290,10 +370,24 @@ class BSplineField(DisplacementField):
             BSplineField
         """
         params = load_bspline_params(path, units_multiplier)
+        params['Path'] = path
         nx, ny, nz = params['GridSize']
         phi_x = np.array(params['TransformParameters']).reshape(3, nz, ny, nx)
         phi_x = phi_x.swapaxes(1,3)
         return BSplineField(phi_x, **params)
+    
+    def to_transform_file(self, path) -> None:
+        """
+        Writes a tranform parameters file using the weights in the current instantiation.
+        It simply copies the original transform params file, edits the weights and save it to `path`.
+        """
+        wtsAsStrs = [str(w.item()) for w in (self.phi_x/self.scale_factor.reshape(3,1,1,1)).swapaxes(1,3).flatten()]
+        newWeightsLine = f'(TransformParameters {' '.join(wtsAsStrs)})'
+        with open(self.paramsFromFile['Path'], 'r') as f:
+            txt = f.read()
+        txt = sub('\(TransformParameters .*', newWeightsLine, txt)
+        with open(path, 'w') as f:
+            f.write(txt)
     
     @staticmethod
     def from_dict(d: Dict) -> "BSplineField":
