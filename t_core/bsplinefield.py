@@ -382,7 +382,7 @@ class BSplineField(DisplacementField):
         It simply copies the original transform params file, edits the weights and save it to `path`.
         """
         wtsAsStrs = [str(w.item()) for w in (self.phi_x/self.scale_factor.reshape(3,1,1,1)).swapaxes(1,3).flatten()]
-        newWeightsLine = f'(TransformParameters {' '.join(wtsAsStrs)})'
+        newWeightsLine = f'(TransformParameters {" ".join(wtsAsStrs)})'
         with open(self.paramsFromFile['Path'], 'r') as f:
             txt = f.read()
         txt = sub('\(TransformParameters .*', newWeightsLine, txt)
