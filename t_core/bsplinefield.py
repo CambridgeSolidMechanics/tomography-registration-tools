@@ -252,7 +252,8 @@ class BSplineField(DisplacementField):
             self, 
             x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
             u: torch.Tensor,
-            phi_guess: np.array = None
+            phi_guess: np.array = None,
+            solverAtol = 1e-3
     ) -> np.ndarray:
         # use double precision for stability
         assert x.ndim==1 and y.ndim==1 and z.ndim==1 and u.ndim==1
@@ -267,7 +268,7 @@ class BSplineField(DisplacementField):
         if isinstance(phi_guess, torch.Tensor):
             phi_guess = phi_guess.numpy()
         # sol = sp.sparse.linalg.lsqr(A, u.numpy().flatten(), x0=phi_guess.flatten())
-        sol = sp.sparse.linalg.lsmr(A, u.numpy().flatten(), x0=phi_guess.flatten(), show=False, atol=1e-3)
+        sol = sp.sparse.linalg.lsmr(A, u.numpy().flatten(), x0=phi_guess.flatten(), show=False, atol=solverAtol)
         weights = torch.Tensor(sol[0])
         # reshape to 3d. However, this  still only gives 
         # the weights for one component of the displacement
@@ -278,7 +279,8 @@ class BSplineField(DisplacementField):
             x: torch.Tensor, y: torch.Tensor, z: torch.Tensor,
             u: torch.Tensor,
             uidx: int,
-            phi_guess: np.array = None
+            phi_guess: np.array = None,
+            solverAtol = 1e-3
     ) -> np.ndarray:
         
         x = x.flatten()
@@ -314,7 +316,8 @@ class BSplineField(DisplacementField):
                                                          y=locToVolNorm(y, 1),
                                                          z=locToVolNorm(z, 2),
                                                          u=2*u/((resolution[uidx]-1)*dx),
-                                                         phi_guess=phi_guess
+                                                         phi_guess=phi_guess,
+                                                         solverAtol=solverAtol
                                                          )
         self.support_outside = oldSupportOutside
         return weights
