@@ -132,7 +132,7 @@ class BSplineField(DisplacementField):
         T = self.A_matrix_linear_operator(self.phi_x[i, :, :, :], location_consts=loc_consts)
         return T
         
-    @lru_cache
+    # @lru_cache
     def compute_A_matrix_linear_operator_constants(
             self, 
             x: Union[torch.Tensor, np.ndarray],
@@ -245,7 +245,7 @@ class BSplineField(DisplacementField):
         weights = weights.flatten()
         assert idx0.shape == flat_index.shape
         # A = torch.sparse_coo_tensor(torch.vstack([idx0, flat_index]), weights, size=(npoints, nx*ny*nz), dtype=torch.float64)
-        A = sp.sparse.coo_matrix((weights.numpy().flatten(), (idx0.numpy().flatten(), flat_index.numpy().flatten())), shape=(npoints, nx*ny*nz))
+        A = sp.sparse.coo_matrix((weights.numpy().flatten(), (idx0.numpy().flatten(), flat_index.numpy().flatten())), shape=(npoints, nx*ny*nz), dtype=np.longdouble)
         return A
     
     def compute_weights_from_displacement(
@@ -268,8 +268,8 @@ class BSplineField(DisplacementField):
         if isinstance(phi_guess, torch.Tensor):
             phi_guess = phi_guess.numpy()
         # sol = sp.sparse.linalg.lsqr(A, u.numpy().flatten(), x0=phi_guess.flatten())
-        sol = sp.sparse.linalg.lsmr(A, u.numpy().flatten(), x0=phi_guess.flatten(), show=False, atol=solverAtol)
-        weights = torch.Tensor(sol[0])
+        sol = sp.sparse.linalg.lsmr(A, u.numpy().flatten().astype(np.longdouble), x0=phi_guess.flatten().astype(np.longdouble), show=False, atol=solverAtol)
+        weights = torch.Tensor(sol[0].astype(np.float32))
         # reshape to 3d. However, this  still only gives 
         # the weights for one component of the displacement
         return weights.reshape(1, *self.grid_size)
@@ -353,6 +353,25 @@ class BSplineField(DisplacementField):
             i
         )
 
+
+    def compute_uij(self,
+                       x,
+                       y,
+                       z,
+                       i,
+                       j,
+                       delta = None):
+        if delta is None:
+            delta = self.spacing[j]/2
+        if j == 0:
+            return (self.real_displacement(x+delta, y, z, i=i)-self.real_displacement(x-delta, y, z, i=i))/delta
+        if j == 1:
+            return (self.real_displacement(x, y+delta, z, i=i)-self.real_displacement(x, y-delta, z, i=i))/delta
+        if j == 2:
+            return (self.real_displacement(x, y, z+delta, i=i)-self.real_displacement(x, y, z-delta, i=i))/delta
+        else:
+            raise('j must be 0, 1, or 2.')
+        
     @staticmethod
     def from_transform_file(
         path: Union[str, Path], units_multiplier: float = 1.0
