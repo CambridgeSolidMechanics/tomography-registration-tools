@@ -124,14 +124,14 @@ def plot_volume(vol: np.ndarray):
     fig.tight_layout()
     plt.show()
 
-def load_volume(fn: Union[str, Path], resolution: Iterable[int], dtype=np.float32) -> np.ndarray:
+def load_volume(fn: Union[str, Path], resolution=None, dtype=np.float32) -> np.ndarray:
     """Load volume data from binary file.
 
     By convention, the order of the input dimensions (e.g. in VG Studio) 
     is (z,y,x). We return volume with order (x,y,z)
     Args:
         fn (Union[str, Path]): file name
-        resolution (Iterable[int]): [x,y,z] resolution in voxels
+        resolution: [x,y,z] resolution in voxels. Can be skipped if .mhd file is provided instead of .raw file.
         dtype (Optional, np.dtype): data type of the volume. Defaults to np.float32.
 
     Returns:
@@ -140,6 +140,23 @@ def load_volume(fn: Union[str, Path], resolution: Iterable[int], dtype=np.float3
     if isinstance(fn, str):
         fn = Path(fn)
     assert fn.exists()
+
+    '''Check if extension of fn is .mhd'''
+    if fn.suffix == '.mhd':
+        '''read mhd file'''
+        with open(fn, 'r') as f:
+            lines = f.readlines()
+        '''Extract DimSize and ElementDataFile from mhd file'''
+        for line in lines:
+            if 'DimSize' in line:
+                resStr = line.split('=')[-1].strip()
+                resolution = [int(i) for i in resStr.split() if i.isdigit()]
+            if 'ElementDataFile' in line:
+                dataFile = line.split('=')[-1].strip()
+        '''Load data from raw file'''
+        fn = fn.parent / dataFile
+        return load_volume(fn, resolution)
+
     data = np.fromfile(fn, dtype=dtype)
     vol = data.reshape([resolution[i] for i in [2,1,0]])
     vol = vol.swapaxes(0,2)
