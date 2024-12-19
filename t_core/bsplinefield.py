@@ -364,11 +364,11 @@ class BSplineField(DisplacementField):
         if delta is None:
             delta = self.spacing[j]/2
         if j == 0:
-            return (self.real_displacement(x+delta, y, z, i=i)-self.real_displacement(x-delta, y, z, i=i))/delta
+            return (self.real_displacement(x+delta, y, z, i=i)-self.real_displacement(x-delta, y, z, i=i))/(2*delta)
         if j == 1:
-            return (self.real_displacement(x, y+delta, z, i=i)-self.real_displacement(x, y-delta, z, i=i))/delta
+            return (self.real_displacement(x, y+delta, z, i=i)-self.real_displacement(x, y-delta, z, i=i))/(2*delta)
         if j == 2:
-            return (self.real_displacement(x, y, z+delta, i=i)-self.real_displacement(x, y, z-delta, i=i))/delta
+            return (self.real_displacement(x, y, z+delta, i=i)-self.real_displacement(x, y, z-delta, i=i))/(2*delta)
         else:
             raise('j must be 0, 1, or 2.')
         
