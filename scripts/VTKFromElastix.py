@@ -49,11 +49,11 @@ def calculateDispEtc(splineField, volMask, underSampRatio):
     splineField.support_outside = False    
     resolution = splineField.paramsFromFile['Size']
     spacing = splineField.paramsFromFile['Spacing']
+    origin = splineField.paramsFromFile['Origin']
     
     print('Calculating displacements and def grad')
     
-    scanSize = [r*s for r,s in zip(resolution, spacing)] # in um
-    xyz = [np.linspace(0.0, s, res) for s, res in zip(scanSize, resolution)]
+    xyz = [np.arange(res)*sp+o for res, sp, o in zip(resolution, spacing, origin)]
     xyz = [s[underSampRatio//2::underSampRatio] for s in xyz]
     XYZ = np.meshgrid(*xyz, indexing='ij')
     UXYZ = [splineField.real_displacement(*XYZ, i=i) for i in range(3)]

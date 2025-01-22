@@ -6,7 +6,7 @@ channels:
   - anaconda
 dependencies:
   - matplotlib
-  - numpy
+  - numpy<2
   - scipy
   - opencv
   - python
