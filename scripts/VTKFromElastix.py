@@ -9,8 +9,6 @@ import t_core.bsplinefield as bsp
 import t_core.volume_tools as vt
 import t_core.fields as fl
 import numpy as np
-sys.path.insert(0,'../DVC_analysis')
-from DVCPlotHelpers import DVCResultNew
 
 from tqdm import tqdm
 import vtk
@@ -28,17 +26,14 @@ def writeVTK(XYZ, UXYZ, F, detF, E, underSampRatio, spacing, outFilePath):
 
     grid.dimensions = XYZ[0].shape
 
-    grid.origin = (0, 0, 0)  # The bottom left corner of the data set
+    grid.origin = tuple(tmp[0][0, 0, 0] for tmp in XYZ)  # The bottom left corner of the data set
 
     grid.spacing = tuple(s*underSampRatio for s in spacing) #in um
     # Add the data values to the cell data
 
     grid.point_data['U'] = np.hstack(tuple(u.numpy().flatten(order="F").reshape(-1, 1) for u in UXYZ))
     grid.active_vectors_name = 'U'
-    # for i in range(3):
-    #     for j in range(3):
-    #         grid.point_data[f"F{axLabel[i]}{axLabel[j]}"] = F[i][j].flatten(order="F")  # Flatten the array
-    #         grid.point_data[f"E{axLabel[i]}{axLabel[j]}"] = E[i][j].flatten(order="F")
+
     grid.point_data['F'] = np.moveaxis(np.reshape(F, (3, 3, -1), order="F"), -1, 0)
     grid.point_data['E'] = np.moveaxis(np.reshape(E, (3, 3, -1), order="F"), -1, 0)
 
